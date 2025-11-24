@@ -1,6 +1,6 @@
 //@ts-nocheck
 "use client"
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { Layout, Typography, Button, Modal, Slider, Input, Tag, Popover, Form, Select, List, DatePicker, ConfigProvider, theme, message, Tooltip, Segmented, Switch } from "antd";
 import ptBR from 'antd/locale/pt_BR';
 import dayjs from "dayjs";
@@ -78,6 +78,19 @@ const GanttGeral = () => {
     const [selectedProjectForTask, setSelectedProjectForTask] = useState(null); // Estado auxiliar para o modal de nova tarefa
     const [conflictModal, setConflictModal] = useState({ visible: false, taskData: null, affectedProjects: [] }); // Modal de resolução de conflitos
     const [taskDetailsModal, setTaskDetailsModal] = useState({ visible: false, task: null }); // Modal de detalhes da tarefa
+    const [welcomeModalVisible, setWelcomeModalVisible] = useState(false); // Modal de boas vindas
+
+    useEffect(() => {
+        const hasSeenWelcome = localStorage.getItem('hasSeenWelcome_v1');
+        if (!hasSeenWelcome) {
+            setWelcomeModalVisible(true);
+        }
+    }, []);
+
+    const handleCloseWelcome = () => {
+        localStorage.setItem('hasSeenWelcome_v1', 'true');
+        setWelcomeModalVisible(false);
+    };
 
     // --- Cálculos Dinâmicos de Data ---
     const { startDate, totalMonths } = useMemo(() => {
@@ -1235,6 +1248,24 @@ const GanttGeral = () => {
                         task={taskDetailsModal.task}
                         onCancel={() => setTaskDetailsModal({ visible: false, task: null })}
                     />
+
+                    {/* Modal de Boas Vindas */}
+                    <Modal
+                        title={<div className="flex items-center gap-2"><WarningOutlined className="text-blue-500" /> Dados de Exemplo</div>}
+                        open={welcomeModalVisible}
+                        onOk={handleCloseWelcome}
+                        onCancel={handleCloseWelcome}
+                        footer={[
+                            <Button key="ok" type="primary" onClick={handleCloseWelcome} className="bg-indigo-600">
+                                Entendi
+                            </Button>
+                        ]}
+                        centered
+                    >
+                        <p>Bem-vindo ao <b>Gantt Master Pro</b>.</p>
+                        <p className="mt-2">Os dados apresentados nesta tela são <b>fictícios</b> e gerados automaticamente apenas para fins de demonstração das funcionalidades do sistema.</p>
+                        <p className="mt-2 text-slate-500 text-sm">Você pode editar, mover e excluir itens livremente para testar a aplicação.</p>
+                    </Modal>
                 </Layout>
             </div>
         </ConfigProvider>
