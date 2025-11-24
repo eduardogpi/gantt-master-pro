@@ -128,37 +128,6 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
                         <div className={`absolute top-0 left-0 h-full ${progressClass} opacity-10 transition-all`} style={{ width: `${item.percent}%` }} />
                         <div className={`absolute bottom-0 left-0 h-[3px] ${progressClass} transition-all`} style={{ width: `${item.percent}%` }} />
                     </div>
-
-                    <div className={`flex-shrink-0 mr-2 ${isSubTask ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]'} bg-slate-800 dark:bg-slate-950 text-white rounded-full flex items-center justify-center font-bold shadow-sm z-10 relative`}>
-                        #{rank}
-                    </div>
-
-                    <div className="flex flex-col justify-center leading-none overflow-hidden flex-1 z-10">
-                        <span className={`${fontSize} font-bold truncate ${textClass} select-none`}>{item.actionName}</span>
-                        {!hasImpact && !isSubTask && (
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
-                                {dayjs(item.startDate).format("DD/MM")} - {dayjs(item.finalDate).format("DD/MM")}
-                            </span>
-                        )}
-                    </div>
-
-                    {looseTasks.map((task) => {
-                        const relativeStartDays = task.startDate.diff(item.startDate, 'day');
-                        const taskLeft = relativeStartDays * zoomLevel;
-                        const taskWidth = calculateWidth(task.startDate, task.finalDate, zoomLevel);
-                        const isImpactTask = task.mode === 'impact';
-                        const taskColor = isImpactTask ? 'bg-red-500' : 'bg-amber-400';
-                        const taskBorder = isImpactTask ? 'border-red-700' : 'border-amber-600';
-
-                        return (
-                            <Tooltip title={`${task.actionName} (${task.responsible})`} key={task.id}>
-                                <div
-                                    className={`absolute h-[10px] top-[${isSubTask ? '20px' : '26px'}] rounded-full border ${taskColor} ${taskBorder} shadow-sm z-20 cursor-help hover:scale-110 transition-transform`}
-                                    style={{ left: taskLeft, width: taskWidth, minWidth: 8 }}
-                                />
-                            </Tooltip>
-                        );
-                    })}
                 </div>
 
                 {hasImpact && (
@@ -169,19 +138,53 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
                         </div>
                     }>
                         <div
-                            className="h-full flex items-center justify-center px-2 cursor-help border-y border-r border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/50 rounded-r-full relative overflow-hidden"
+                            className="h-full flex items-center justify-center px-2 cursor-help border-y border-r border-red-300 dark:border-red-800 bg-red-50 dark:bg-red-900/50 rounded-r-full relative overflow-hidden z-0"
                             style={{
                                 width: impactWidth,
                                 backgroundImage: 'repeating-linear-gradient(45deg, transparent, transparent 5px, rgba(255,0,0,0.05) 5px, rgba(255,0,0,0.05) 10px)'
                             }}
                         >
-                            <div className="flex flex-col items-center justify-center leading-none overflow-hidden w-full z-10">
+                            <div className="flex flex-col items-center justify-center leading-none overflow-hidden w-full z-0 opacity-50">
                                 <span className="text-[8px] text-red-400 font-bold uppercase tracking-tighter truncate w-full text-center">ATRASO</span>
                                 <span className="text-[10px] text-red-600 dark:text-red-400 font-bold">+{impactDays}d</span>
                             </div>
                         </div>
                     </Tooltip>
                 )}
+
+                {/* Content Overlay (Text & Rank) */}
+                <div className="absolute top-0 left-0 w-full h-full flex items-center px-2 pointer-events-none z-50">
+                    <div className={`flex-shrink-0 mr-2 ${isSubTask ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]'} bg-slate-800 dark:bg-slate-950 text-white rounded-full flex items-center justify-center font-bold shadow-sm`}>
+                        #{rank}
+                    </div>
+
+                    <div className="flex flex-col justify-center leading-none overflow-hidden flex-1">
+                        <span className={`${fontSize} font-bold truncate ${textClass} select-none`}>{item.actionName}</span>
+                        {!hasImpact && !isSubTask && (
+                            <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                                {dayjs(item.startDate).format("DD/MM")} - {dayjs(item.finalDate).format("DD/MM")}
+                            </span>
+                        )}
+                    </div>
+                </div>
+
+                {looseTasks.map((task) => {
+                    const relativeStartDays = task.startDate.diff(item.startDate, 'day');
+                    const taskLeft = relativeStartDays * zoomLevel;
+                    const taskWidth = calculateWidth(task.startDate, task.finalDate, zoomLevel);
+                    const isImpactTask = task.mode === 'impact';
+                    const taskColor = isImpactTask ? 'bg-red-500' : 'bg-amber-400';
+                    const taskBorder = isImpactTask ? 'border-red-700' : 'border-amber-600';
+
+                    return (
+                        <Tooltip title={`${task.actionName} (${task.responsible})`} key={task.id}>
+                            <div
+                                className={`absolute h-[10px] top-[${isSubTask ? '20px' : '26px'}] rounded-full border ${taskColor} ${taskBorder} shadow-sm z-30 cursor-help hover:scale-110 transition-transform`}
+                                style={{ left: taskLeft, width: taskWidth, minWidth: 8 }}
+                            />
+                        </Tooltip>
+                    );
+                })}
             </div>
         </div>
     );
