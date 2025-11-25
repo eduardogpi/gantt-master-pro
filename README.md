@@ -39,6 +39,12 @@ Tarefas menores podem ser inseridas dentro de uma ação principal com dois comp
     *   **Prioridade:** Focado no ajuste de importância (reordenar linhas verticalmente).
 *   **Caminho Crítico:** Visualização opcional que destaca tarefas que impactam diretamente o prazo final.
 *   **Dark Mode:** Interface moderna com tema escuro definido como **padrão**, com suporte a alternância para tema claro.
+*   **Menu Unificado:** Botões de criação ("Nova Ação", "Nova Tarefa", "Tarefa Avulsa") agrupados em um menu dropdown intuitivo para melhor organização.
+
+### 6. Mobile & Responsividade
+*   **Layout Adaptativo:** Interface otimizada para diferentes tamanhos de tela, com menu lateral (Drawer) em dispositivos móveis.
+*   **Interações Touch:** Suporte aprimorado para dispositivos de toque, permitindo acesso rápido a ações contextuais (Editar, Excluir) via clique nas linhas das tarefas.
+*   **Tipografia Responsiva:** Ajuste automático de fontes e espaçamentos para garantir legibilidade em telas pequenas.
 
 ## 🛠️ Tecnologias
 *   React
