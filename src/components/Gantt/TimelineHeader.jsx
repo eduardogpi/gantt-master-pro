@@ -22,7 +22,7 @@ const TimelineHeader = ({ zoomLevel, startDate, totalMonths }) => {
                             style={{ width: monthWidth, minWidth: monthWidth }}
                         >
                             {/* Linha Superior: Nome do Mês */}
-                            <div className="h-[25px] flex items-center justify-center bg-slate-50 dark:bg-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 uppercase border-b border-slate-100 dark:border-slate-600 transition-colors duration-300">
+                            <div className="h-[25px] flex items-center justify-center bg-slate-50 dark:bg-slate-700 text-xs sm:text-sm font-bold text-slate-600 dark:text-slate-300 uppercase border-b border-slate-100 dark:border-slate-600 transition-colors duration-300">
                                 {monthStart.format('MMMM YYYY')}
                             </div>
 
@@ -33,7 +33,7 @@ const TimelineHeader = ({ zoomLevel, startDate, totalMonths }) => {
                                     Array.from({ length: daysInMonth }).map((_, d) => (
                                         <div
                                             key={d}
-                                            className="flex items-center justify-center border-r border-slate-100 dark:border-slate-700 text-[10px] text-slate-400 dark:text-slate-500 transition-colors duration-300"
+                                            className="flex items-center justify-center border-r border-slate-100 dark:border-slate-700 text-[10px] sm:text-xs text-slate-400 dark:text-slate-500 transition-colors duration-300"
                                             style={{ width: zoomLevel, minWidth: zoomLevel }}
                                         >
                                             {d + 1}
@@ -49,7 +49,7 @@ const TimelineHeader = ({ zoomLevel, startDate, totalMonths }) => {
                                         return (
                                             <div
                                                 key={w}
-                                                className="flex items-center justify-center border-r border-slate-100 dark:border-slate-700 text-[10px] text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-700/50 transition-colors duration-300"
+                                                className="flex items-center justify-center border-r border-slate-100 dark:border-slate-700 text-[10px] sm:text-xs text-slate-500 dark:text-slate-400 bg-slate-50/50 dark:bg-slate-700/50 transition-colors duration-300"
                                                 style={{ width: weekWidth, minWidth: weekWidth }}
                                             >
                                                 S{w + 1}

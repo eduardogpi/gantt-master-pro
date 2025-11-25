@@ -85,7 +85,7 @@ const DraggableRow = React.memo(({ item, index, zoomLevel, showBaseline, showCri
                             </div>
                         </div>
                     </div>
-                } title={null} trigger="contextMenu">
+                } title={null} trigger={['click', 'contextMenu']}>
                     <div>
                         <TaskBar
                             item={item}

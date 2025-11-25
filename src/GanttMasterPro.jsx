@@ -1,7 +1,7 @@
 //@ts-nocheck
 "use client"
-import React, { useState, useMemo, useEffect } from "react";
-import { Layout, Typography, Button, Modal, Slider, Input, Tag, Popover, Form, Select, List, DatePicker, ConfigProvider, theme, message, Tooltip, Segmented, Switch } from "antd";
+import React, { useState, useMemo } from "react";
+import { Layout, Typography, Button, Modal, Slider, Input, Tag, Popover, Form, Select, List, DatePicker, ConfigProvider, theme, message, Tooltip, Segmented, Switch, Drawer, Dropdown } from "antd";
 import ptBR from 'antd/locale/pt_BR';
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
@@ -18,7 +18,7 @@ import {
     ZoomInOutlined, ZoomOutOutlined, SaveOutlined, DiffOutlined,
     ColumnHeightOutlined, ColumnWidthOutlined,
     ThunderboltOutlined, BlockOutlined, GlobalOutlined,
-    MoonOutlined, SunOutlined, FileAddOutlined
+    MoonOutlined, SunOutlined, FileAddOutlined, MenuOutlined, DownOutlined
 } from "@ant-design/icons";
 
 import { initialMockData } from './data/mockData.js';
@@ -78,14 +78,13 @@ const GanttGeral = () => {
     const [selectedProjectForTask, setSelectedProjectForTask] = useState(null); // Estado auxiliar para o modal de nova tarefa
     const [conflictModal, setConflictModal] = useState({ visible: false, taskData: null, affectedProjects: [] }); // Modal de resolução de conflitos
     const [taskDetailsModal, setTaskDetailsModal] = useState({ visible: false, task: null }); // Modal de detalhes da tarefa
-    const [welcomeModalVisible, setWelcomeModalVisible] = useState(false); // Modal de boas vindas
-
-    useEffect(() => {
-        const hasSeenWelcome = localStorage.getItem('hasSeenWelcome_v1');
-        if (!hasSeenWelcome) {
-            setWelcomeModalVisible(true);
+    const [welcomeModalVisible, setWelcomeModalVisible] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return !localStorage.getItem('hasSeenWelcome_v1');
         }
-    }, []);
+        return false;
+    }); // Modal de boas vindas
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false); // Menu mobile
 
     const handleCloseWelcome = () => {
         localStorage.setItem('hasSeenWelcome_v1', 'true');
@@ -835,21 +834,21 @@ const GanttGeral = () => {
                 <Layout className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans transition-colors duration-300">
                     {contextHolder}
 
-                    <Header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-6 h-16 flex items-center justify-between shadow-sm z-20 transition-colors duration-300 sticky top-0">
+                    <Header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-4 md:px-6 h-16 flex items-center justify-between shadow-sm z-20 transition-colors duration-300 sticky top-0">
                         {/* Left: Brand & Filter */}
-                        <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-4 md:gap-6">
                             <div className="flex items-center gap-3">
                                 <div className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white p-2 rounded-xl shadow-lg shadow-indigo-500/20 flex items-center justify-center">
                                     <CalendarOutlined className="text-lg" />
                                 </div>
-                                <Title level={4} style={{ margin: 0, color: darkMode ? '#f1f5f9' : '#0f172a', fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.025em' }}>
+                                <Title level={4} style={{ margin: 0, color: darkMode ? '#f1f5f9' : '#0f172a', fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.025em' }} className="hidden sm:block whitespace-nowrap">
                                     Gantt Master <span className="text-indigo-600 dark:text-indigo-400">Pro</span>
                                 </Title>
                             </div>
 
-                            <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
+                            <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800 hidden md:block"></div>
 
-                            <div className="flex items-center gap-3">
+                            <div className="hidden md:flex items-center gap-3">
                                 <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Visão</span>
                                 <Select
                                     value={selectedResponsible}
@@ -865,8 +864,18 @@ const GanttGeral = () => {
                             </div>
                         </div>
 
-                        {/* Center: View Controls */}
-                        <div className="flex items-center gap-4 bg-slate-100/50 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800">
+                        {/* Mobile Menu Button */}
+                        {/* Mobile Menu Button */}
+                        <div className="md:hidden">
+                            <Button
+                                type="text"
+                                icon={<MenuOutlined />}
+                                onClick={() => setMobileMenuOpen(true)}
+                            />
+                        </div>
+
+                        {/* Center: View Controls (Desktop) */}
+                        <div className="hidden md:flex items-center gap-4 bg-slate-100/50 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800">
                             <Segmented
                                 options={[
                                     { label: 'Cronograma', value: 'horizontal', icon: <ColumnWidthOutlined /> },
@@ -900,20 +909,37 @@ const GanttGeral = () => {
                             </div>
                         </div>
 
-                        {/* Right: Actions */}
-                        <div className="flex items-center gap-3">
-                            <Button type="primary" className="bg-indigo-600 shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 border-none h-9 px-4 rounded-lg font-medium" icon={<PlusOutlined />} onClick={handleAddNew}>
-                                Nova Ação
-                            </Button>
-
-                            <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 gap-1">
-                                <Tooltip title="Nova Tarefa">
-                                    <Button size="small" type="text" className="text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-md" icon={<FileAddOutlined />} onClick={() => setNewTaskModal({ visible: true })} />
-                                </Tooltip>
-                                <Tooltip title="Tarefa Avulsa">
-                                    <Button size="small" type="text" className="text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-md" icon={<ThunderboltOutlined />} onClick={() => setLooseTaskModal({ visible: true, parentProject: null })} />
-                                </Tooltip>
-                            </div>
+                        {/* Right: Actions (Desktop) */}
+                        <div className="hidden md:flex items-center gap-3">
+                            <Dropdown
+                                menu={{
+                                    items: [
+                                        {
+                                            key: '1',
+                                            label: 'Nova Ação',
+                                            icon: <PlusOutlined />,
+                                            onClick: handleAddNew,
+                                        },
+                                        {
+                                            key: '2',
+                                            label: 'Nova Tarefa',
+                                            icon: <FileAddOutlined />,
+                                            onClick: () => setNewTaskModal({ visible: true }),
+                                        },
+                                        {
+                                            key: '3',
+                                            label: 'Tarefa Avulsa',
+                                            icon: <ThunderboltOutlined />,
+                                            onClick: () => setLooseTaskModal({ visible: true, parentProject: null }),
+                                        },
+                                    ]
+                                }}
+                                trigger={['click']}
+                            >
+                                <Button type="primary" className="bg-indigo-600 shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 border-none h-9 px-4 rounded-lg font-medium flex items-center gap-2">
+                                    <PlusOutlined /> Adicionar <DownOutlined className="text-xs" />
+                                </Button>
+                            </Dropdown>
 
                             <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-700 mx-1"></div>
 
@@ -948,6 +974,99 @@ const GanttGeral = () => {
                             </div>
                         </div>
                     </Header>
+
+                    {/* Mobile Drawer */}
+                    <Drawer
+                        title="Menu"
+                        placement="right"
+                        onClose={() => setMobileMenuOpen(false)}
+                        open={mobileMenuOpen}
+                        width={300}
+                        styles={{ body: { padding: 0 } }}
+                    >
+                        <div className="flex flex-col p-4 gap-6">
+                            {/* Filter */}
+                            <div className="flex flex-col gap-2">
+                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Visão</span>
+                                <Select
+                                    value={selectedResponsible}
+                                    onChange={setSelectedResponsible}
+                                    style={{ width: '100%' }}
+                                    className="font-medium"
+                                >
+                                    <Option value="Todos">Todas as Ações</Option>
+                                    {allResponsibles.map(dev => <Option key={dev} value={dev}>{dev}</Option>)}
+                                </Select>
+                            </div>
+
+                            {/* View Mode */}
+                            <div className="flex flex-col gap-2">
+                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Modo</span>
+                                <Segmented
+                                    block
+                                    options={[
+                                        { label: 'Cronograma', value: 'horizontal', icon: <ColumnWidthOutlined /> },
+                                        { label: 'Prioridade', value: 'vertical', icon: <ColumnHeightOutlined /> },
+                                    ]}
+                                    value={interactionMode}
+                                    onChange={setInteractionMode}
+                                />
+                            </div>
+
+                            {/* Zoom */}
+                            <div className="flex flex-col gap-2">
+                                <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Zoom</span>
+                                <div className="flex items-center gap-3">
+                                    <ZoomOutOutlined className="text-xs text-slate-400" />
+                                    <Slider
+                                        min={5}
+                                        max={100}
+                                        value={zoomLevel}
+                                        onChange={setZoomLevel}
+                                        className="flex-1 m-0"
+                                        tooltip={{ formatter: null }}
+                                    />
+                                    <ZoomInOutlined className="text-xs text-slate-400" />
+                                </div>
+                            </div>
+
+                            {/* Toggles */}
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-slate-700">Mostrar Subtarefas</span>
+                                <Switch size="small" checked={showSubtasks} onChange={setShowSubtasks} />
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-sm font-medium text-slate-700">Tema Escuro</span>
+                                <Switch size="small" checked={darkMode} onChange={setDarkMode} />
+                            </div>
+
+                            <div className="h-[1px] bg-slate-200 my-2"></div>
+
+                            {/* Actions */}
+                            <div className="flex flex-col gap-3">
+                                <Button type="primary" block icon={<PlusOutlined />} onClick={() => { handleAddNew(); setMobileMenuOpen(false); }}>
+                                    Nova Ação
+                                </Button>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button block icon={<FileAddOutlined />} onClick={() => { setNewTaskModal({ visible: true }); setMobileMenuOpen(false); }}>
+                                        Nova Tarefa
+                                    </Button>
+                                    <Button block icon={<ThunderboltOutlined />} onClick={() => { setLooseTaskModal({ visible: true, parentProject: null }); setMobileMenuOpen(false); }}>
+                                        Tarefa Avulsa
+                                    </Button>
+                                </div>
+                                <Button block icon={<SaveOutlined />} onClick={() => { handleOpenSave(); setMobileMenuOpen(false); }}>
+                                    Salvar Alterações
+                                </Button>
+                            </div>
+
+                            {/* Undo/Redo */}
+                            <div className="flex gap-2 justify-center mt-2">
+                                <Button shape="circle" icon={<UndoOutlined />} onClick={handleUndo} disabled={history.past.length === 0} />
+                                <Button shape="circle" icon={<RedoOutlined />} onClick={handleRedo} disabled={history.future.length === 0} />
+                            </div>
+                        </div>
+                    </Drawer>
 
                     <Content className="flex-1 overflow-auto relative bg-white dark:bg-slate-900 cursor-default select-none custom-scrollbar transition-colors duration-300" id="gantt-container">
                         <DndContext sensors={sensors} onDragEnd={handleDragEnd} onDragStart={({ active }) => setActiveId(active.id)} modifiers={modifiers}>
