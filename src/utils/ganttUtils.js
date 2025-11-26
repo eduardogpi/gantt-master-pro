@@ -1,4 +1,4 @@
-import { HEADER_HEIGHT, ROW_HEIGHT } from '../constants/config.js';
+import { HEADER_HEIGHT, ROW_HEIGHT, MOBILE_ROW_HEIGHT } from '../constants/config.js';
 
 /**
  * Função auxiliar para extrair todas as datas recursivamente
@@ -31,18 +31,22 @@ export function calculateLeft(date, pixelsPerDay, baseDate) {
  * @param {dayjs.Dayjs} startDate - Data de início.
  * @param {dayjs.Dayjs} finalDate - Data de fim.
  * @param {number} pixelsPerDay - Nível de zoom.
+ * @param {boolean} isMobile - Se está em dispositivo móvel.
  */
-export function calculateWidth(startDate, finalDate, pixelsPerDay) {
+export function calculateWidth(startDate, finalDate, pixelsPerDay, isMobile = false) {
     const diffDays = finalDate.diff(startDate, 'day');
-    return Math.max(diffDays * pixelsPerDay, 40);
+    const minWidth = isMobile ? 60 : 40; // Maior em mobile para melhor touch
+    return Math.max(diffDays * pixelsPerDay, minWidth);
 }
 
 /**
  * Calcula a posição vertical (top) baseada no índice da linha.
  * @param {number} index - Índice do item na lista.
+ * @param {boolean} isMobile - Se está em dispositivo móvel.
  */
-export function calculateTop(index) {
-    return HEADER_HEIGHT + (index * ROW_HEIGHT);
+export function calculateTop(index, isMobile = false) {
+    const rowHeight = isMobile ? MOBILE_ROW_HEIGHT : ROW_HEIGHT;
+    return HEADER_HEIGHT + (index * rowHeight);
 }
 
 /**

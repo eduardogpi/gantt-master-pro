@@ -3,16 +3,21 @@ import dayjs from 'dayjs';
 import { Tooltip } from 'antd';
 import { calculateWidth } from '../../utils/ganttUtils.js';
 
-const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft, baseWidth, rank, zoomLevel, allData = [] }) => {
+const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft, baseWidth, rank, zoomLevel, allData = [], isMobile = false }) => {
     let bgClass = "bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-700";
     let progressClass = "bg-blue-500";
     let textClass = "text-slate-700 dark:text-slate-200";
     let borderClass = "border-blue-200 dark:border-blue-700";
 
     // Estilo distinto para sub-tarefas (Módulos)
+    // Em mobile, aumentar o tamanho mínimo para melhor touch
     const isSubTask = item.depth > 0;
-    const barHeight = isSubTask ? 28 : 36;
-    const fontSize = isSubTask ? "text-[10px]" : "text-xs";
+    const barHeight = isMobile 
+        ? (isSubTask ? 36 : 44) 
+        : (isSubTask ? 28 : 36);
+    const fontSize = isMobile 
+        ? (isSubTask ? "text-xs" : "text-sm") 
+        : (isSubTask ? "text-[10px]" : "text-xs");
 
     if (isCritical) {
         bgClass = "bg-red-50 dark:bg-red-900/30";
@@ -154,14 +159,18 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
 
                 {/* Content Overlay (Text & Rank) */}
                 <div className="absolute top-0 left-0 w-full h-full flex items-center px-2 pointer-events-none z-50">
-                    <div className={`flex-shrink-0 mr-2 ${isSubTask ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]'} bg-slate-800 dark:bg-slate-950 text-white rounded-full flex items-center justify-center font-bold shadow-sm`}>
+                    <div className={`flex-shrink-0 mr-2 ${
+                        isMobile 
+                            ? (isSubTask ? 'w-6 h-6 text-[10px]' : 'w-7 h-7 text-xs') 
+                            : (isSubTask ? 'w-5 h-5 text-[9px]' : 'w-6 h-6 text-[10px]')
+                    } bg-slate-800 dark:bg-slate-950 text-white rounded-full flex items-center justify-center font-bold shadow-sm`}>
                         #{rank}
                     </div>
 
                     <div className="flex flex-col justify-center leading-none overflow-hidden flex-1">
                         <span className={`${fontSize} font-bold truncate ${textClass} select-none`}>{item.actionName}</span>
                         {!hasImpact && !isSubTask && (
-                            <span className="text-[10px] text-slate-400 dark:text-slate-500 truncate mt-0.5">
+                            <span className={`${isMobile ? 'text-xs' : 'text-[10px]'} text-slate-400 dark:text-slate-500 truncate mt-0.5`}>
                                 {dayjs(item.startDate).format("DD/MM")} - {dayjs(item.finalDate).format("DD/MM")}
                             </span>
                         )}

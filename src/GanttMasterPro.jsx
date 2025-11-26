@@ -1,7 +1,7 @@
 //@ts-nocheck
 "use client"
-import React, { useState, useMemo, useEffect } from "react";
-import { Layout, Typography, Button, Modal, Slider, Input, Tag, Popover, Form, Select, List, DatePicker, ConfigProvider, theme, message, Tooltip, Segmented, Switch } from "antd";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
+import { Layout, Typography, Button, Modal, Slider, Input, Form, Select, List, DatePicker, ConfigProvider, theme, message, Tooltip, Segmented, Switch, Drawer } from "antd";
 import ptBR from 'antd/locale/pt_BR';
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
@@ -14,15 +14,15 @@ import { arrayMove } from "@dnd-kit/sortable";
 import {
     UndoOutlined, RedoOutlined, WarningOutlined,
     CalendarOutlined, PlusOutlined,
-    DeleteOutlined, EditOutlined,
+    DeleteOutlined,
     ZoomInOutlined, ZoomOutOutlined, SaveOutlined, DiffOutlined,
     ColumnHeightOutlined, ColumnWidthOutlined,
     ThunderboltOutlined, BlockOutlined, GlobalOutlined,
-    MoonOutlined, SunOutlined, FileAddOutlined
+    MoonOutlined, SunOutlined, FileAddOutlined, MenuOutlined
 } from "@ant-design/icons";
 
 import { initialMockData } from './data/mockData.js';
-import { HEADER_HEIGHT, ROW_HEIGHT } from './constants/config.js';
+import { HEADER_HEIGHT, ROW_HEIGHT, MOBILE_ROW_HEIGHT } from './constants/config.js';
 import {
     getAllDates, calculateLeft, calculateWidth, calculateTop,
     getConflictedIds, findEarliestAnchor, applyDeltaToChildren,
@@ -36,7 +36,17 @@ import TodayLine from './components/Gantt/TodayLine.jsx';
 import DependencyLines from './components/Gantt/DependencyLines.jsx';
 import TaskBar from './components/Gantt/TaskBar.jsx';
 import DraggableRow from './components/Gantt/DraggableRow.jsx';
-import TaskDetailsModal from './components/Modals/TaskDetailsModal.jsx';
+import {
+    TaskDetailsModal,
+    NewTaskModal,
+    LooseTaskModal,
+    ConflictModal,
+    EditActionModal,
+    AuditModal,
+    SaveChangesModal,
+    WelcomeModal
+} from './components/Modals';
+import { useKeyboardShortcuts } from './hooks';
 
 dayjs.extend(duration);
 dayjs.extend(isBetween);
@@ -44,7 +54,6 @@ dayjs.locale('pt-br');
 
 const { Header, Content } = Layout;
 const { Title } = Typography;
-const { TextArea } = Input;
 const { Option } = Select;
 const GanttGeral = () => {
     // --- Estado de Dados ---
@@ -56,11 +65,13 @@ const GanttGeral = () => {
     const [zoomLevel, setZoomLevel] = useState(20); // Nível de zoom (pixels por dia)
     const [concurrencyLimit] = useState(2); // Limite de tarefas simultâneas por dev (para detecção de conflito)
     const [showBaseline] = useState(true); // Mostrar linha de base (planejado vs realizado)
-    const [showCriticalPath] = useState(false); // Destacar caminho crítico (não implementado visualmente ainda)
     const [selectedResponsible, setSelectedResponsible] = useState("Todos"); // Filtro por desenvolvedor
     const [interactionMode, setInteractionMode] = useState('horizontal'); // 'horizontal' (Cronograma) ou 'vertical' (Prioridade)
     const [darkMode, setDarkMode] = useState(true); // Tema escuro/claro
     const [showSubtasks, setShowSubtasks] = useState(true); // Mostrar subtarefas
+    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
+    const [isTablet, setIsTablet] = useState(typeof window !== 'undefined' ? window.innerWidth >= 768 && window.innerWidth < 1024 : false);
+    const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     // --- Estado de Histórico (Undo/Redo) ---
     const [history, setHistory] = useState({ past: [], present: initialMockData, future: [] });
@@ -79,14 +90,12 @@ const GanttGeral = () => {
     const [selectedProjectForTask, setSelectedProjectForTask] = useState(null); // Estado auxiliar para o modal de nova tarefa
     const [conflictModal, setConflictModal] = useState({ visible: false, taskData: null, affectedProjects: [] }); // Modal de resolução de conflitos
     const [taskDetailsModal, setTaskDetailsModal] = useState({ visible: false, task: null }); // Modal de detalhes da tarefa
-    const [welcomeModalVisible, setWelcomeModalVisible] = useState(false); // Modal de boas vindas
-
-    useEffect(() => {
-        const hasSeenWelcome = localStorage.getItem('hasSeenWelcome_v1');
-        if (!hasSeenWelcome) {
-            setWelcomeModalVisible(true);
+    const [welcomeModalVisible, setWelcomeModalVisible] = useState(() => {
+        if (typeof window !== 'undefined') {
+            return !localStorage.getItem('hasSeenWelcome_v1');
         }
-    }, []);
+        return false;
+    }); // Modal de boas vindas
 
     const handleCloseWelcome = () => {
         localStorage.setItem('hasSeenWelcome_v1', 'true');
@@ -165,8 +174,9 @@ const GanttGeral = () => {
     }, [interactionMode]);
 
     const contentHeight = useMemo(() => {
-        return HEADER_HEIGHT + (visibleData.length * ROW_HEIGHT) + 100;
-    }, [visibleData.length]);
+        const rowHeight = isMobile ? MOBILE_ROW_HEIGHT : ROW_HEIGHT;
+        return HEADER_HEIGHT + (visibleData.length * rowHeight) + 100;
+    }, [visibleData.length, isMobile]);
 
     const sensors = useSensors(
         useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -182,31 +192,35 @@ const GanttGeral = () => {
         setData(newData);
     };
 
-    const handleUndo = () => {
-        if (history.past.length === 0) return;
-        const previous = history.past[history.past.length - 1];
-        const newPast = history.past.slice(0, -1);
-        setHistory({
-            past: newPast,
-            present: previous,
-            future: [history.present, ...history.future]
+    const handleUndo = useCallback(() => {
+        setHistory(curr => {
+            if (curr.past.length === 0) return curr;
+            const previous = curr.past[curr.past.length - 1];
+            const newPast = curr.past.slice(0, -1);
+            setData(previous);
+            return {
+                past: newPast,
+                present: previous,
+                future: [curr.present, ...curr.future]
+            };
         });
-        setData(previous);
-    };
+    }, []);
 
-    const handleRedo = () => {
-        if (history.future.length === 0) return;
-        const next = history.future[0];
-        const newFuture = history.future.slice(1);
-        setHistory({
-            past: [...history.past, history.present],
-            present: next,
-            future: newFuture
+    const handleRedo = useCallback(() => {
+        setHistory(curr => {
+            if (curr.future.length === 0) return curr;
+            const next = curr.future[0];
+            const newFuture = curr.future.slice(1);
+            setData(next);
+            return {
+                past: [...curr.past, curr.present],
+                present: next,
+                future: newFuture
+            };
         });
-        setData(next);
-    };
+    }, []);
 
-    const handleAddNew = () => {
+    const handleAddNew = useCallback(() => {
         const newItem = {
             id: Date.now(),
             actionName: 'Nova Ação',
@@ -222,7 +236,7 @@ const GanttGeral = () => {
             children: []
         };
         setModalEdit({ visible: true, item: newItem, isNew: true });
-    };
+    }, []);
 
     const handleEditSave = (values) => {
         let newData = [...data];
@@ -508,7 +522,7 @@ const GanttGeral = () => {
         message.success("Tarefa vinculada criada!");
     };
 
-    const calculateChanges = () => {
+    const calculateChanges = useCallback(() => {
         const changes = [];
         const currentIds = new Set(data.map(i => i.id));
         const savedIds = new Set(lastSavedData.map(i => i.id));
@@ -540,9 +554,9 @@ const GanttGeral = () => {
         });
 
         return changes;
-    };
+    }, [data, lastSavedData]);
 
-    const handleOpenSave = () => {
+    const handleOpenSave = useCallback(() => {
         const changes = calculateChanges();
         if (changes.length === 0) {
             message.info("Nenhuma alteração pendente.");
@@ -550,7 +564,7 @@ const GanttGeral = () => {
         }
         setChangesList(changes);
         setSaveModalOpen(true);
-    };
+    }, [calculateChanges]);
 
     const handleConfirmSave = () => {
         // Atualizar as datas originais (baseline) para refletir o novo estado salvo
@@ -816,6 +830,44 @@ const GanttGeral = () => {
         return p.developers.map(d => d.name);
     }, [looseTaskModal.parentProject]);
 
+    // Effect para detectar mudança de tamanho da tela (mobile/tablet)
+    useEffect(() => {
+        const handleResize = () => {
+            const width = window.innerWidth;
+            setIsMobile(width < 768);
+            setIsTablet(width >= 768 && width < 1024);
+        };
+        window.addEventListener('resize', handleResize);
+        return () => window.removeEventListener('resize', handleResize);
+    }, []);
+
+    // --- Verificar se algum modal está aberto (para desabilitar atalhos) ---
+    const isAnyModalOpen = useMemo(() => {
+        return modalAuditoria.visible || 
+               modalEdit.visible || 
+               saveModalOpen || 
+               looseTaskModal.visible || 
+               newTaskModal.visible || 
+               conflictModal.visible || 
+               taskDetailsModal.visible ||
+               welcomeModalVisible ||
+               mobileMenuOpen;
+    }, [modalAuditoria.visible, modalEdit.visible, saveModalOpen, looseTaskModal.visible, newTaskModal.visible, conflictModal.visible, taskDetailsModal.visible, welcomeModalVisible, mobileMenuOpen]);
+
+    // --- Atalhos de Teclado ---
+    const keyboardHandlers = useMemo(() => ({
+        onUndo: handleUndo,
+        onRedo: handleRedo,
+        onSave: handleOpenSave,
+        onNew: handleAddNew,
+        onEscape: () => {
+            // Fechar modais ao pressionar Escape
+            if (taskDetailsModal.visible) setTaskDetailsModal({ visible: false, task: null });
+        }
+    }), [handleUndo, handleRedo, handleOpenSave, handleAddNew, taskDetailsModal.visible]);
+
+    useKeyboardShortcuts(keyboardHandlers, !isAnyModalOpen);
+
     return (
         <ConfigProvider locale={ptBR} theme={{
             algorithm: darkMode ? theme.darkAlgorithm : theme.defaultAlgorithm,
@@ -836,119 +888,328 @@ const GanttGeral = () => {
                 <Layout className="h-screen flex flex-col bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 font-sans transition-colors duration-300">
                     {contextHolder}
 
-                    <Header className="bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-6 h-16 flex items-center justify-between shadow-sm z-20 transition-colors duration-300 sticky top-0">
-                        {/* Left: Brand & Filter */}
-                        <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-3">
-                                <div className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white p-2 rounded-xl shadow-lg shadow-indigo-500/20 flex items-center justify-center">
-                                    <CalendarOutlined className="text-lg" />
-                                </div>
-                                <Title level={4} style={{ margin: 0, color: darkMode ? '#f1f5f9' : '#0f172a', fontSize: '1.25rem', fontWeight: 700, letterSpacing: '-0.025em' }}>
-                                    Gantt Master <span className="text-indigo-600 dark:text-indigo-400">Pro</span>
-                                </Title>
+                    <Header className={`bg-white/80 dark:bg-slate-900/80 backdrop-blur-md border-b border-slate-200 dark:border-slate-800 px-2 sm:px-3 md:px-4 lg:px-6 h-14 lg:h-16 flex items-center justify-between shadow-sm z-20 transition-all duration-300 sticky top-0 gap-2`}>
+                        {/* Left: Brand */}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                            <div className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white p-1.5 rounded-lg shadow-lg shadow-indigo-500/20 flex items-center justify-center">
+                                <CalendarOutlined className="text-sm md:text-base" />
                             </div>
-
-                            <div className="h-8 w-[1px] bg-slate-200 dark:bg-slate-800"></div>
-
-                            <div className="flex items-center gap-3">
-                                <span className="text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Visão</span>
-                                <Select
-                                    value={selectedResponsible}
-                                    onChange={setSelectedResponsible}
-                                    style={{ width: 180 }}
-                                    bordered={false}
-                                    className="bg-slate-100/50 dark:bg-slate-800/50 rounded-lg font-medium text-slate-700 dark:text-slate-200"
-                                    dropdownStyle={{ zIndex: 2000 }}
-                                >
-                                    <Option value="Todos">Todas as Ações</Option>
-                                    {allResponsibles.map(dev => <Option key={dev} value={dev}>{dev}</Option>)}
-                                </Select>
-                            </div>
+                            <Title level={4} className="hidden sm:block" style={{ margin: 0, color: darkMode ? '#f1f5f9' : '#0f172a', fontSize: isTablet ? '0.875rem' : '1.125rem', fontWeight: 700, letterSpacing: '-0.025em', whiteSpace: 'nowrap' }}>
+                                {isTablet ? 'Gantt' : 'Gantt Master'} <span className="text-indigo-600 dark:text-indigo-400">Pro</span>
+                            </Title>
                         </div>
 
-                        {/* Center: View Controls */}
-                        <div className="flex items-center gap-4 bg-slate-100/50 dark:bg-slate-900/50 p-1.5 rounded-2xl border border-slate-200 dark:border-slate-800">
-                            <Segmented
-                                options={[
-                                    { label: 'Cronograma', value: 'horizontal', icon: <ColumnWidthOutlined /> },
-                                    { label: 'Prioridade', value: 'vertical', icon: <ColumnHeightOutlined /> },
-                                ]}
-                                value={interactionMode}
-                                onChange={setInteractionMode}
-                                className="shadow-sm border border-slate-200/50 dark:border-slate-700/50 font-medium"
-                            />
+                        {/* Center: Filter + View Controls */}
+                        <div className="flex items-center gap-2 md:gap-3 flex-1 justify-center min-w-0 max-w-xl">
+                            {/* Filtro */}
+                            <Select
+                                value={selectedResponsible}
+                                onChange={setSelectedResponsible}
+                                style={{ width: isMobile ? 90 : isTablet ? 110 : 160, flexShrink: 0 }}
+                                bordered={false}
+                                className="bg-slate-100/50 dark:bg-slate-800/50 rounded-lg font-medium text-slate-700 dark:text-slate-200"
+                                dropdownStyle={{ zIndex: 2000 }}
+                                size="small"
+                            >
+                                <Option value="Todos">{isMobile ? 'Todos' : isTablet ? 'Todos' : 'Todas as Ações'}</Option>
+                                {allResponsibles.map(dev => <Option key={dev} value={dev}>{dev}</Option>)}
+                            </Select>
 
-                            <div className="w-[1px] bg-slate-200 dark:bg-slate-700 h-6"></div>
-
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs font-medium text-slate-500 dark:text-slate-400">Tarefas</span>
-                                <Switch size="small" checked={showSubtasks} onChange={setShowSubtasks} />
-                            </div>
-
-                            <div className="w-[1px] bg-slate-200 dark:bg-slate-700 h-6"></div>
-
-                            <div className="flex items-center gap-3 w-40 px-2">
-                                <ZoomOutOutlined className="text-xs text-slate-400" />
-                                <Slider
-                                    min={5}
-                                    max={100}
-                                    value={zoomLevel}
-                                    onChange={setZoomLevel}
-                                    className="flex-1 m-0"
-                                    tooltip={{ formatter: null }}
-                                />
-                                <ZoomInOutlined className="text-xs text-slate-400" />
-                            </div>
+                            {/* View Controls - apenas em desktop grande */}
+                            {!isMobile && !isTablet && (
+                                <div className="hidden xl:flex items-center gap-3 bg-slate-100/50 dark:bg-slate-900/50 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                                    <Segmented
+                                        size="small"
+                                        options={[
+                                            { label: 'Cronograma', value: 'horizontal', icon: <ColumnWidthOutlined /> },
+                                            { label: 'Prioridade', value: 'vertical', icon: <ColumnHeightOutlined /> },
+                                        ]}
+                                        value={interactionMode}
+                                        onChange={setInteractionMode}
+                                    />
+                                    <div className="w-[1px] bg-slate-200 dark:bg-slate-700 h-5"></div>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-xs text-slate-500 dark:text-slate-400">Tarefas</span>
+                                        <Switch size="small" checked={showSubtasks} onChange={setShowSubtasks} />
+                                    </div>
+                                    <div className="w-[1px] bg-slate-200 dark:bg-slate-700 h-5"></div>
+                                    <div className="flex items-center gap-2 w-28 px-1">
+                                        <ZoomOutOutlined className="text-xs text-slate-400" />
+                                        <Slider min={5} max={100} value={zoomLevel} onChange={setZoomLevel} className="flex-1 m-0" tooltip={{ formatter: null }} />
+                                        <ZoomInOutlined className="text-xs text-slate-400" />
+                                    </div>
+                                </div>
+                            )}
                         </div>
 
                         {/* Right: Actions */}
-                        <div className="flex items-center gap-3">
-                            <Button type="primary" className="bg-indigo-600 shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 border-none h-9 px-4 rounded-lg font-medium" icon={<PlusOutlined />} onClick={handleAddNew}>
-                                Nova Ação
-                            </Button>
+                        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+                            {/* Desktop grande: Todas as ações expandidas */}
+                            {!isMobile && !isTablet && (
+                                <>
+                                    <Button type="primary" size="small" className="hidden lg:flex bg-indigo-600 shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 border-none rounded-lg font-medium" icon={<PlusOutlined />} onClick={handleAddNew}>
+                                        Nova Ação
+                                    </Button>
+                                    <Tooltip title="Nova Ação">
+                                        <Button type="primary" size="small" className="lg:hidden bg-indigo-600" icon={<PlusOutlined />} onClick={handleAddNew} />
+                                    </Tooltip>
 
-                            <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-1 gap-1">
-                                <Tooltip title="Nova Tarefa">
-                                    <Button size="small" type="text" className="text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-md" icon={<FileAddOutlined />} onClick={() => setNewTaskModal({ visible: true })} />
-                                </Tooltip>
-                                <Tooltip title="Tarefa Avulsa">
-                                    <Button size="small" type="text" className="text-slate-600 dark:text-slate-300 hover:bg-white dark:hover:bg-slate-700 rounded-md" icon={<ThunderboltOutlined />} onClick={() => setLooseTaskModal({ visible: true, parentProject: null })} />
-                                </Tooltip>
+                                    <div className="hidden md:flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 gap-0.5">
+                                        <Tooltip title="Nova Tarefa (Ctrl+N)">
+                                            <Button size="small" type="text" icon={<FileAddOutlined />} onClick={() => setNewTaskModal({ visible: true })} />
+                                        </Tooltip>
+                                        <Tooltip title="Tarefa Avulsa">
+                                            <Button size="small" type="text" icon={<ThunderboltOutlined />} onClick={() => setLooseTaskModal({ visible: true, parentProject: null })} />
+                                        </Tooltip>
+                                    </div>
+
+                                    <div className="hidden sm:flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 gap-0.5">
+                                        <Tooltip title="Salvar (Ctrl+S)">
+                                            <Button size="small" type="text" icon={<SaveOutlined />} onClick={handleOpenSave} className="text-indigo-600 dark:text-indigo-400" />
+                                        </Tooltip>
+                                        <Tooltip title="Desfazer (Ctrl+Z)">
+                                            <Button size="small" type="text" icon={<UndoOutlined />} onClick={handleUndo} disabled={history.past.length === 0} />
+                                        </Tooltip>
+                                        <Tooltip title="Refazer (Ctrl+Y)">
+                                            <Button size="small" type="text" icon={<RedoOutlined />} onClick={handleRedo} disabled={history.future.length === 0} />
+                                        </Tooltip>
+                                    </div>
+
+                                    <Tooltip title={darkMode ? 'Modo Claro' : 'Modo Escuro'}>
+                                        <Button
+                                            size="small"
+                                            icon={darkMode ? <SunOutlined /> : <MoonOutlined />}
+                                            onClick={() => setDarkMode(!darkMode)}
+                                            className="border-slate-200 dark:border-slate-700 text-slate-500 dark:text-yellow-400"
+                                        />
+                                    </Tooltip>
+
+                                    {/* Menu para opções extras em telas médias */}
+                                    <Button
+                                        size="small"
+                                        icon={<MenuOutlined />}
+                                        onClick={() => setMobileMenuOpen(true)}
+                                        className="xl:hidden border-slate-200 dark:border-slate-700"
+                                    />
+                                </>
+                            )}
+
+                            {/* Tablet: Layout compacto */}
+                            {isTablet && (
+                                <>
+                                    <Tooltip title="Nova Ação">
+                                        <Button type="primary" size="small" className="bg-indigo-600" icon={<PlusOutlined />} onClick={handleAddNew} />
+                                    </Tooltip>
+                                    <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 gap-0.5">
+                                        <Tooltip title="Salvar">
+                                            <Button size="small" type="text" icon={<SaveOutlined />} onClick={handleOpenSave} className="text-indigo-600 dark:text-indigo-400" />
+                                        </Tooltip>
+                                        <Tooltip title="Desfazer">
+                                            <Button size="small" type="text" icon={<UndoOutlined />} onClick={handleUndo} disabled={history.past.length === 0} />
+                                        </Tooltip>
+                                    </div>
+                                    <Tooltip title={darkMode ? 'Modo Claro' : 'Modo Escuro'}>
+                                        <Button
+                                            size="small"
+                                            icon={darkMode ? <SunOutlined /> : <MoonOutlined />}
+                                            onClick={() => setDarkMode(!darkMode)}
+                                            className="text-slate-500 dark:text-yellow-400"
+                                        />
+                                    </Tooltip>
+                                    <Button
+                                        size="small"
+                                        icon={<MenuOutlined />}
+                                        onClick={() => setMobileMenuOpen(true)}
+                                        className="border-slate-200 dark:border-slate-700"
+                                    />
+                                </>
+                            )}
+
+                            {/* Mobile: Mínimo */}
+                            {isMobile && (
+                                <>
+                                    <Tooltip title="Nova Ação">
+                                        <Button type="primary" size="small" className="bg-indigo-600" icon={<PlusOutlined />} onClick={handleAddNew} />
+                                    </Tooltip>
+                                    <Button
+                                        size="small"
+                                        icon={<MenuOutlined />}
+                                        onClick={() => setMobileMenuOpen(true)}
+                                        className="border-slate-200 dark:border-slate-700"
+                                    />
+                                </>
+                            )}
+                        </div>
+                    </Header>
+
+                    {/* Mobile/Tablet Menu Drawer */}
+                    <Drawer
+                        title={
+                            <div className="flex items-center justify-between">
+                                <span className="font-semibold">Menu</span>
+                                <Button
+                                    type="text"
+                                    size="small"
+                                    icon={darkMode ? <SunOutlined className="text-yellow-500" /> : <MoonOutlined />}
+                                    onClick={() => setDarkMode(!darkMode)}
+                                />
+                            </div>
+                        }
+                        placement="right"
+                        onClose={() => setMobileMenuOpen(false)}
+                        open={mobileMenuOpen}
+                        width={isMobile ? '85%' : 320}
+                        styles={{ 
+                            body: { padding: 0, display: 'flex', flexDirection: 'column' },
+                            header: { borderBottom: '1px solid var(--ant-color-border)' }
+                        }}
+                        className={darkMode ? 'dark' : ''}
+                    >
+                        <div className="flex flex-col flex-1 overflow-auto">
+                            {/* Quick Actions - Sempre visíveis no topo */}
+                            <div className="p-4 bg-gradient-to-r from-indigo-500/10 to-violet-500/10 dark:from-indigo-900/30 dark:to-violet-900/30 border-b border-slate-200 dark:border-slate-700">
+                                <div className="grid grid-cols-2 gap-2">
+                                    <Button 
+                                        type="primary" 
+                                        block 
+                                        className="bg-indigo-600 h-12 text-base" 
+                                        icon={<PlusOutlined />} 
+                                        onClick={() => { handleAddNew(); setMobileMenuOpen(false); }}
+                                    >
+                                        Nova Ação
+                                    </Button>
+                                    <Button 
+                                        block 
+                                        className="h-12" 
+                                        icon={<FileAddOutlined />} 
+                                        onClick={() => { setNewTaskModal({ visible: true }); setMobileMenuOpen(false); }}
+                                    >
+                                        Nova Tarefa
+                                    </Button>
+                                </div>
+                                <Button 
+                                    block 
+                                    className="mt-2 h-10 border-dashed" 
+                                    icon={<ThunderboltOutlined className="text-orange-500" />} 
+                                    onClick={() => { setLooseTaskModal({ visible: true, parentProject: null }); setMobileMenuOpen(false); }}
+                                >
+                                    Adicionar Tarefa Avulsa
+                                </Button>
                             </div>
 
-                            <div className="h-6 w-[1px] bg-slate-200 dark:bg-slate-700 mx-1"></div>
+                            {/* View Controls */}
+                            <div className="p-4 border-b border-slate-100 dark:border-slate-800">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <ColumnWidthOutlined className="text-indigo-500" />
+                                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Visualização</span>
+                                </div>
+                                
+                                <Segmented
+                                    block
+                                    size="large"
+                                    options={[
+                                        { label: 'Cronograma', value: 'horizontal', icon: <ColumnWidthOutlined /> },
+                                        { label: 'Prioridade', value: 'vertical', icon: <ColumnHeightOutlined /> },
+                                    ]}
+                                    value={interactionMode}
+                                    onChange={setInteractionMode}
+                                    className="mb-4"
+                                />
 
-                            <div className="flex items-center gap-2">
-                                <Tooltip title="Salvar">
-                                    <Button
-                                        shape="circle"
-                                        type="text"
-                                        className="text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-900/20 hover:bg-indigo-100 dark:hover:bg-indigo-900/40 border-none"
-                                        icon={<SaveOutlined />}
-                                        onClick={handleOpenSave}
-                                    />
-                                </Tooltip>
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                                        <div className="flex items-center gap-2">
+                                            <BlockOutlined className="text-slate-400" />
+                                            <span className="text-sm font-medium">Mostrar Sub-tarefas</span>
+                                        </div>
+                                        <Switch checked={showSubtasks} onChange={setShowSubtasks} />
+                                    </div>
 
-                                <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-full p-1 gap-0.5">
-                                    <Tooltip title="Desfazer">
-                                        <Button shape="circle" size="small" type="text" icon={<UndoOutlined />} onClick={handleUndo} disabled={history.past.length === 0} className="dark:text-slate-400" />
-                                    </Tooltip>
-                                    <Tooltip title="Refazer">
-                                        <Button shape="circle" size="small" type="text" icon={<RedoOutlined />} onClick={handleRedo} disabled={history.future.length === 0} className="dark:text-slate-400" />
-                                    </Tooltip>
+                                    <div className="p-3 bg-slate-50 dark:bg-slate-800/50 rounded-lg">
+                                        <div className="flex items-center gap-2 mb-2">
+                                            <ZoomInOutlined className="text-slate-400" />
+                                            <span className="text-sm font-medium">Zoom: {zoomLevel}px/dia</span>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <Button 
+                                                size="small" 
+                                                icon={<ZoomOutOutlined />} 
+                                                onClick={() => setZoomLevel(Math.max(5, zoomLevel - 5))}
+                                                disabled={zoomLevel <= 5}
+                                            />
+                                            <Slider
+                                                min={5}
+                                                max={100}
+                                                step={5}
+                                                value={zoomLevel}
+                                                onChange={setZoomLevel}
+                                                className="flex-1 m-0"
+                                                tooltip={{ formatter: (v) => `${v}px` }}
+                                            />
+                                            <Button 
+                                                size="small" 
+                                                icon={<ZoomInOutlined />} 
+                                                onClick={() => setZoomLevel(Math.min(100, zoomLevel + 5))}
+                                                disabled={zoomLevel >= 100}
+                                            />
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
-                            <div className="pl-2 border-l border-slate-200 dark:border-slate-800 ml-1">
-                                <Button
-                                    shape="circle"
-                                    icon={darkMode ? <SunOutlined /> : <MoonOutlined />}
-                                    onClick={() => setDarkMode(!darkMode)}
-                                    className="border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-500 dark:text-yellow-400 hover:text-indigo-600 dark:hover:text-yellow-300 transition-colors"
-                                />
+                            {/* System Actions */}
+                            <div className="p-4 flex-1">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <SaveOutlined className="text-indigo-500" />
+                                    <span className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Sistema</span>
+                                </div>
+                                
+                                <div className="space-y-2">
+                                    <Button 
+                                        block 
+                                        size="large"
+                                        icon={<SaveOutlined />} 
+                                        className="text-left flex items-center justify-start h-12"
+                                        onClick={() => { handleOpenSave(); setMobileMenuOpen(false); }}
+                                    >
+                                        <span className="flex-1">Salvar Alterações</span>
+                                        <span className="text-xs text-slate-400">Ctrl+S</span>
+                                    </Button>
+
+                                    <div className="flex gap-2">
+                                        <Button 
+                                            block 
+                                            size="large"
+                                            icon={<UndoOutlined />} 
+                                            onClick={handleUndo} 
+                                            disabled={history.past.length === 0}
+                                            className="h-12"
+                                        >
+                                            Desfazer
+                                        </Button>
+                                        <Button 
+                                            block 
+                                            size="large"
+                                            icon={<RedoOutlined />} 
+                                            onClick={handleRedo} 
+                                            disabled={history.future.length === 0}
+                                            className="h-12"
+                                        >
+                                            Refazer
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Footer info */}
+                            <div className="p-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50">
+                                <div className="flex items-center justify-between text-xs text-slate-400">
+                                    <span>Gantt Master Pro v1.0</span>
+                                    <span>{visibleData.length} itens visíveis</span>
+                                </div>
                             </div>
                         </div>
-                    </Header>
+                    </Drawer>
 
                     <div className="flex-1 relative overflow-hidden flex flex-col">
                         <Content className="absolute inset-0 overflow-auto bg-white dark:bg-slate-900 cursor-default select-none custom-scrollbar transition-colors duration-300" id="gantt-container">
@@ -991,7 +1252,6 @@ const GanttGeral = () => {
                                                     index={index}
                                                     zoomLevel={zoomLevel}
                                                     showBaseline={showBaseline}
-                                                    showCriticalPath={showCriticalPath}
                                                     isConflicted={conflictedIds.has(item.id)}
                                                     onEdit={(it) => setModalEdit({ visible: true, item: it })}
                                                     onDelete={handleDelete}
@@ -1001,6 +1261,7 @@ const GanttGeral = () => {
                                                     allData={data}
                                                     startDate={startDate}
                                                     onTaskClick={(t) => setTaskDetailsModal({ visible: true, task: t })}
+                                                    isMobile={isMobile}
                                                 />
                                             );
                                         })}
@@ -1017,6 +1278,7 @@ const GanttGeral = () => {
                                                 showBaseline={false}
                                                 rank={activeRank}
                                                 zoomLevel={zoomLevel}
+                                                isMobile={isMobile}
                                             />
                                         ) : null}
                                     </DragOverlay>
@@ -1026,226 +1288,63 @@ const GanttGeral = () => {
                         <ScrollControls containerId="gantt-container" dependencies={[zoomLevel, visibleData.length, startDate, totalMonths]} />
                     </div>
 
-                    {/* MODAL NOVA TAREFA VINCULADA */}
-                    <Modal
-                        title="Nova Tarefa Vinculada"
-                        open={newTaskModal.visible}
+                    {/* MODAIS */}
+                    <NewTaskModal
+                        visible={newTaskModal.visible}
                         onCancel={() => { setNewTaskModal({ visible: false }); setSelectedProjectForTask(null); }}
-                        footer={null}
-                        destroyOnClose
-                        centered
-                    >
-                        <Form layout="vertical" onFinish={handleSaveNewTask}>
-                            <Form.Item name="projectId" label="Ação Pai" rules={[{ required: true, message: 'Selecione uma ação' }]}>
-                                <Select
-                                    placeholder="Selecione a ação..."
-                                    onChange={(val) => setSelectedProjectForTask(val)}
-                                >
-                                    {data.map(p => <Option key={p.id} value={p.id}>{p.actionName}</Option>)}
-                                </Select>
-                            </Form.Item>
+                        onFinish={handleSaveNewTask}
+                        data={data}
+                        allResponsibles={allResponsibles}
+                        selectedProjectForTask={selectedProjectForTask}
+                        onProjectChange={setSelectedProjectForTask}
+                    />
 
-                            <Form.Item name="taskName" label="Nome da Tarefa" rules={[{ required: true, message: 'Obrigatório' }]}>
-                                <Input placeholder="Ex: Desenvolvimento Backend..." />
-                            </Form.Item>
-
-                            <Form.Item name="developer" label="Desenvolvedor" rules={[{ required: true, message: 'Obrigatório' }]}>
-                                <Select placeholder="Selecione...">
-                                    {allResponsibles.map(dev => <Option key={dev} value={dev}>{dev}</Option>)}
-                                </Select>
-                            </Form.Item>
-
-                            <Form.Item name="range" label="Período" rules={[{ required: true, message: 'Obrigatório' }]}>
-                                <DatePicker.RangePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
-                            </Form.Item>
-
-                            <Form.Item name="dependencyId" label="Dependência (Opcional)">
-                                <Select
-                                    placeholder="Selecione uma tarefa da mesma ação..."
-                                    allowClear
-                                    disabled={!selectedProjectForTask}
-                                >
-                                    {selectedProjectForTask && data.find(p => p.id === selectedProjectForTask)?.children
-                                        .filter(c => c.status !== 'loose-task')
-                                        .map(t => (
-                                            <Option key={t.id} value={t.id}>{t.actionName}</Option>
-                                        ))
-                                    }
-                                </Select>
-                            </Form.Item>
-
-                            <div className="flex justify-end gap-2 pt-2 border-t">
-                                <Button onClick={() => { setNewTaskModal({ visible: false }); setSelectedProjectForTask(null); }}>Cancelar</Button>
-                                <Button type="primary" htmlType="submit" className="bg-indigo-600">Criar Tarefa</Button>
-                            </div>
-                        </Form>
-                    </Modal>
-
-                    {/* MODAL TAREFA AVULSA */}
-                    <Modal
-                        title={`Adicionar Tarefa Avulsa`}
-                        open={looseTaskModal.visible}
+                    <LooseTaskModal
+                        visible={looseTaskModal.visible}
+                        parentProject={looseTaskModal.parentProject}
                         onCancel={() => setLooseTaskModal({ visible: false, parentProject: null })}
-                        footer={null}
-                        destroyOnClose
-                        centered
-                    >
-                        <Form layout="vertical" onFinish={handleSaveLooseTask}>
-                            {!looseTaskModal.parentProject && (
-                                <Form.Item name="projectId" label="Vincular à Ação (Visual)" rules={[{ required: true, message: 'Selecione uma ação' }]}>
-                                    <Select placeholder="Selecione...">
-                                        {data.map(p => <Select.Option key={p.id} value={p.id}>{p.actionName}</Select.Option>)}
-                                    </Select>
-                                </Form.Item>
-                            )}
+                        onFinish={handleSaveLooseTask}
+                        data={data}
+                        parentDevs={parentDevs}
+                        allResponsibles={allResponsibles}
+                    />
 
-                            {looseTaskModal.parentProject && (
-                                <div className="mb-4 bg-slate-50 p-2 rounded text-sm text-slate-600">
-                                    Adicionando à ação: <b>{looseTaskModal.parentProject?.actionName}</b>
-                                </div>
-                            )}
-
-                            <Form.Item name="taskName" label="Nome da Tarefa" rules={[{ required: true, message: 'Obrigatório' }]}>
-                                <Input placeholder="Ex: Correção urgente, Bug crítico..." />
-                            </Form.Item>
-
-                            <Form.Item name="responsible" label="Responsável (Desenvolvedor)" rules={[{ required: true, message: 'Selecione o responsável' }]}>
-                                <Select placeholder="Selecione o desenvolvedor">
-                                    {parentDevs.length > 0 ? (
-                                        parentDevs.map(name => <Option key={name} value={name}>{name}</Option>)
-                                    ) : (
-                                        allResponsibles.map(name => <Option key={name} value={name}>{name}</Option>)
-                                    )}
-                                </Select>
-                            </Form.Item>
-
-                            <Form.Item name="range" label="Período de Execução" rules={[{ required: true, message: 'Selecione as datas' }]}>
-                                <DatePicker.RangePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
-                            </Form.Item>
-
-                            {/* Informação de Propagação (Automática agora, sem checkbox) */}
-                            <div className="flex items-start gap-2 p-3 bg-amber-50 rounded border border-amber-100 text-xs text-amber-800 mb-2">
-                                <GlobalOutlined className="mt-1" />
-                                <div>
-                                    Atenção: Se houver colisão e você escolher "Impactar Prazo", <b>todas as ações</b> onde o responsável selecionado estiver alocado durante este período serão adiadas automaticamente.
-                                </div>
-                            </div>
-
-                            <div className="flex justify-end gap-2 pt-2 border-t">
-                                <Button onClick={() => setLooseTaskModal({ visible: false, parentProject: null })}>Cancelar</Button>
-                                <Button type="primary" htmlType="submit" className="bg-indigo-600">Verificar e Adicionar</Button>
-                            </div>
-                        </Form>
-                    </Modal>
-
-                    <Modal
-                        title={<div className="flex items-center gap-2"><WarningOutlined className="text-orange-500" /> Conflito de Agenda Detectado</div>}
-                        open={conflictModal.visible}
+                    <ConflictModal
+                        visible={conflictModal.visible}
+                        taskData={conflictModal.taskData}
+                        affectedProjects={conflictModal.affectedProjects}
                         onCancel={() => setConflictModal({ visible: false, taskData: null, affectedProjects: [] })}
-                        footer={[
-                            <Button key="concurrent" icon={<ThunderboltOutlined />} onClick={() => executeCreateTask(conflictModal.taskData, 'concurrent')}>
-                                Executar Concorrentemente
-                            </Button>,
-                            <Button key="impact" type="primary" danger icon={<BlockOutlined />} onClick={() => executeCreateTask(conflictModal.taskData, 'impact', conflictModal.affectedProjects)}>
-                                Impactar Prazo ({conflictModal.affectedProjects.length})
-                            </Button>
-                        ]}
-                        width={550}
-                        centered
-                    >
-                        {conflictModal.taskData && (
-                            <div className="pt-2">
-                                <p className="mb-2">A tarefa <b>{conflictModal.taskData.taskName}</b> coincide com o período de execução de <b>{conflictModal.affectedProjects.length} ação(ões)</b> do desenvolvedor <b>{conflictModal.taskData.responsible}</b>.</p>
-                                <p className="text-slate-500 text-xs mb-4">Período: {conflictModal.taskData.taskStart.format('DD/MM')} - {conflictModal.taskData.taskEnd.format('DD/MM')}</p>
+                        onConcurrent={() => executeCreateTask(conflictModal.taskData, 'concurrent')}
+                        onImpact={() => executeCreateTask(conflictModal.taskData, 'impact', conflictModal.affectedProjects)}
+                    />
 
-                                {conflictModal.affectedProjects.length > 0 && (
-                                    <div className="bg-red-50 border border-red-100 p-2 rounded text-xs text-red-700 mb-4 max-h-24 overflow-auto">
-                                        <b>Ações afetadas:</b> {conflictModal.affectedProjects.map(p => p.actionName).join(', ')}
-                                    </div>
-                                )}
-
-                                <p className="font-semibold mt-4">Como deseja prosseguir?</p>
-                            </div>
-                        )}
-                    </Modal>
-
-                    {/* Outros Modais */}
-                    <Modal
-                        title={<div className="flex items-center gap-2"><WarningOutlined className="text-yellow-500" /> Confirmar Alteração</div>}
-                        open={modalAuditoria.visible}
-                        onOk={() => {
-                            if (!modalAuditoria.reason.trim()) return message.error("Motivo obrigatório.");
+                    <AuditModal
+                        visible={modalAuditoria.visible}
+                        details={modalAuditoria.details}
+                        reason={modalAuditoria.reason}
+                        onReasonChange={(val) => setModalAuditoria(prev => ({ ...prev, reason: val }))}
+                        onConfirm={() => {
                             updateDataWithHistory(modalAuditoria.pendingData);
                             setModalAuditoria({ visible: false, pendingData: null, reason: '', details: '' });
                             message.success("Atualizado com sucesso.");
                         }}
                         onCancel={() => setModalAuditoria({ visible: false, pendingData: null, reason: '', details: '' })}
-                        okText="Confirmar"
-                        cancelText="Cancelar"
-                        centered
-                    >
-                        <div className="flex flex-col gap-4 pt-2">
-                            <div className="bg-slate-100 p-3 rounded text-slate-700 border border-slate-200 text-sm">{modalAuditoria.details}</div>
-                            <div>
-                                <label className="font-semibold text-sm mb-1 block">Motivo da Mudança:</label>
-                                <TextArea rows={3} placeholder="Justificativa..." value={modalAuditoria.reason} onChange={e => setModalAuditoria(prev => ({ ...prev, reason: e.target.value }))} />
-                            </div>
-                        </div>
-                    </Modal>
-                    <Modal
-                        title={<div className="flex items-center gap-2"><SaveOutlined className="text-blue-600" /> Resumo de Alterações</div>}
-                        open={saveModalOpen}
-                        onOk={handleConfirmSave}
+                    />
+
+                    <SaveChangesModal
+                        visible={saveModalOpen}
+                        changesList={changesList}
+                        onConfirm={handleConfirmSave}
                         onCancel={() => setSaveModalOpen(false)}
-                        okText="Salvar"
-                        cancelText="Voltar"
-                        centered
-                        width={600}
-                    >
-                        <List
-                            itemLayout="horizontal"
-                            dataSource={changesList}
-                            renderItem={(item) => (
-                                <List.Item>
-                                    <List.Item.Meta
-                                        avatar={<div className={`text-lg ${item.color}`}>{item.icon}</div>}
-                                        title={<span className={`${item.color} font-medium`}>{item.type.toUpperCase()}</span>}
-                                        description={<span className="text-slate-700">{item.text}</span>}
-                                    />
-                                </List.Item>
-                            )}
-                        />
-                    </Modal>
-                    <Modal
-                        title={modalEdit.isNew ? "Nova Ação" : "Editar Detalhes"}
-                        open={modalEdit.visible}
+                    />
+
+                    <EditActionModal
+                        visible={modalEdit.visible}
+                        item={modalEdit.item}
+                        isNew={modalEdit.isNew}
                         onCancel={() => setModalEdit({ visible: false, item: null })}
-                        footer={null}
-                        destroyOnClose
-                        centered
-                    >
-                        {modalEdit.visible && (
-                            <Form layout="vertical" initialValues={{
-                                actionName: modalEdit.item.actionName,
-                                percent: modalEdit.item.percent,
-                                developers: modalEdit.item.developers.map(d => d.name).join(', ')
-                            }} onFinish={handleEditSave}>
-                                <Form.Item name="actionName" label="Nome" rules={[{ required: true }]}>
-                                    <Input />
-                                </Form.Item>
-                                <Form.Item name="percent" label="Progresso">
-                                    <Slider min={0} max={100} />
-                                </Form.Item>
-                                <Form.Item name="developers" label="Desenvolvedores">
-                                    <Input placeholder="Ex: João, Maria" />
-                                </Form.Item>
-                                <div className="flex justify-end gap-2 mt-4">
-                                    <Button onClick={() => setModalEdit({ visible: false, item: null })}>Cancelar</Button>
-                                    <Button type="primary" htmlType="submit" className="bg-indigo-600">Salvar</Button>
-                                </div>
-                            </Form>
-                        )}
-                    </Modal>
+                        onFinish={handleEditSave}
+                    />
 
                     <TaskDetailsModal
                         visible={taskDetailsModal.visible}
@@ -1253,23 +1352,10 @@ const GanttGeral = () => {
                         onCancel={() => setTaskDetailsModal({ visible: false, task: null })}
                     />
 
-                    {/* Modal de Boas Vindas */}
-                    <Modal
-                        title={<div className="flex items-center gap-2"><WarningOutlined className="text-blue-500" /> Dados de Exemplo</div>}
-                        open={welcomeModalVisible}
-                        onOk={handleCloseWelcome}
-                        onCancel={handleCloseWelcome}
-                        footer={[
-                            <Button key="ok" type="primary" onClick={handleCloseWelcome} className="bg-indigo-600">
-                                Entendi
-                            </Button>
-                        ]}
-                        centered
-                    >
-                        <p>Bem-vindo ao <b>Gantt Master Pro</b>.</p>
-                        <p className="mt-2">Os dados apresentados nesta tela são <b>fictícios</b> e gerados automaticamente apenas para fins de demonstração das funcionalidades do sistema.</p>
-                        <p className="mt-2 text-slate-500 text-sm">Você pode editar, mover e excluir itens livremente para testar a aplicação.</p>
-                    </Modal>
+                    <WelcomeModal
+                        visible={welcomeModalVisible}
+                        onClose={handleCloseWelcome}
+                    />
                 </Layout>
             </div>
         </ConfigProvider>

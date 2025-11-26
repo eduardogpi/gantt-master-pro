@@ -2,6 +2,48 @@
 
 Sistema avançado de gerenciamento de **Ações** e cronogramas via Gráfico de Gantt, focado em alocação de recursos, detecção de conflitos e rastreabilidade de alterações.
 
+## 🚀 Novidades da Versão 1.1
+
+### ✨ Melhorias de Código e Arquitetura
+- **Custom Hooks Extraídos:** `useGanttHistory` (undo/redo), `useKeyboardShortcuts` (atalhos), `useIsMobile` (detecção de tela)
+- **Modais Componentizados:** 7 modais extraídos para componentes independentes em `src/components/Modals/`
+- **Handlers Memoizados:** `useCallback` aplicado nos handlers principais para evitar re-renders
+- **Limpeza de Código:** Remoção de imports e estados não utilizados
+
+### 📱 Responsividade Aprimorada
+- **3 Breakpoints:** Mobile (< 768px), Tablet (768-1024px), Desktop (> 1024px)
+- **Header Adaptativo:** Layout otimizado para cada tamanho de tela sem sobreposição
+- **Modais Fullscreen:** Modais ocupam tela inteira em dispositivos móveis
+- **Touch Targets Maiores:** Áreas de toque expandidas (72px) para melhor usabilidade mobile
+- **Altura de Barras Dinâmica:** Desktop 36px, Mobile 44px
+
+### 🎯 Experiência Touch Melhorada
+- **Tap Rápido:** Abre popover com ações rápidas (Editar, Excluir, Tarefa Avulsa)
+- **Toque Longo (500ms):** Abre modal de detalhes completo
+- **Sem Conflito de Eventos:** Separação clara entre gestos de tap e long press
+
+### 📍 Indicadores de Scroll
+- **Gradientes nas Bordas:** Indicam visualmente que há mais conteúdo
+- **Barra de Progresso:** Mini scrollbar horizontal e vertical mostrando posição atual
+- **Botões de Navegação:** Setas direcionais (←→↑↓) para scroll rápido
+
+### ⌨️ Atalhos de Teclado
+| Atalho | Ação |
+|--------|------|
+| `Ctrl+Z` | Desfazer |
+| `Ctrl+Y` / `Ctrl+Shift+Z` | Refazer |
+| `Ctrl+S` | Salvar alterações |
+| `Ctrl+N` | Nova ação |
+| `Escape` | Fechar modal ativo |
+
+### 🎨 Interface do Menu (Drawer)
+- **Quick Actions:** Botões grandes (48px) com gradiente de destaque
+- **Zoom com Botões:** Controle +/- além do slider
+- **Footer Informativo:** Versão + contador de itens visíveis
+- **Dark Mode Toggle:** Disponível no header do drawer
+
+---
+
 ## 📋 Regras de Negócio
 
 ### 1. Agendamento e Movimentação (Drag & Drop)
@@ -42,14 +84,61 @@ Tarefas menores podem ser inseridas dentro de uma ação principal com dois comp
 *   **Menu Unificado:** Botões de criação ("Nova Ação", "Nova Tarefa", "Tarefa Avulsa") agrupados em um menu dropdown intuitivo para melhor organização.
 
 ### 6. Mobile & Responsividade
-*   **Layout Adaptativo:** Interface otimizada para diferentes tamanhos de tela, com menu lateral (Drawer) em dispositivos móveis.
-*   **Interações Touch:** Suporte aprimorado para dispositivos de toque, permitindo acesso rápido a ações contextuais (Editar, Excluir) via clique nas linhas das tarefas.
+*   **Layout Adaptativo:** Interface otimizada para diferentes tamanhos de tela (Mobile, Tablet, Desktop), com menu lateral (Drawer) em dispositivos menores.
+*   **Interações Touch Inteligentes:** 
+    *   Tap rápido para ações contextuais (Popover)
+    *   Toque longo para detalhes completos (Modal)
+*   **Header Responsivo:** Elementos se adaptam e reorganizam conforme o espaço disponível, sem sobreposição.
 *   **Tipografia Responsiva:** Ajuste automático de fontes e espaçamentos para garantir legibilidade em telas pequenas.
 
+---
+
 ## 🛠️ Tecnologias
-*   React
-*   Vite
-*   Ant Design (UI)
-*   Tailwind CSS (Estilização)
+*   React 18+
+*   Vite 7
+*   Ant Design 5 (UI)
+*   Tailwind CSS 3 (Estilização)
 *   Dnd-kit (Drag and Drop)
 *   Day.js (Manipulação de Datas)
+
+## 📁 Estrutura do Projeto
+
+```
+src/
+├── components/
+│   ├── Gantt/           # Componentes do gráfico
+│   │   ├── TaskBar.jsx
+│   │   ├── DraggableRow.jsx
+│   │   ├── ScrollControls.jsx
+│   │   └── ...
+│   └── Modals/          # Modais extraídos
+│       ├── NewTaskModal.jsx
+│       ├── EditActionModal.jsx
+│       └── ...
+├── hooks/               # Custom hooks
+│   ├── useGanttHistory.js
+│   ├── useKeyboardShortcuts.js
+│   ├── useIsMobile.js
+│   └── index.js
+├── constants/           # Configurações
+│   └── config.js
+├── utils/               # Funções utilitárias
+│   └── ganttUtils.js
+└── GanttMasterPro.jsx   # Componente principal
+```
+
+## 🚀 Como Executar
+
+```bash
+# Instalar dependências
+npm install
+
+# Desenvolvimento
+npm run dev
+
+# Build de produção
+npm run build
+
+# Preview do build
+npm run preview
+```
