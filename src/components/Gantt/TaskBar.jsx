@@ -19,11 +19,36 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
         ? (isSubTask ? "text-xs" : "text-sm") 
         : (isSubTask ? "text-[10px]" : "text-xs");
 
+    const impactDays = item.impacts?.reduce((acc, curr) => acc + curr.days, 0) || 0;
+    const hasImpact = impactDays > 0;
+    const isImpactTask = item.status === 'loose-task' && item.mode === 'impact';
+    
+    // Se a tarefa foi impactada, verificamos se o atraso foi "absorvido" pelas subtarefas.
+    // Absorção ocorre quando as subtarefas estruturais (não loose) foram estendidas/movidas e agora alcançam a data final da ação.
+    // Se a ação termina DEPOIS das subtarefas apenas por causa do impacto, mostramos a barra de atraso.
+    let absorbImpactVisuals = false;
+    const structuralChildren = item.children?.filter(c => c.status !== 'loose-task') || [];
+
+    if (hasImpact && structuralChildren.length > 0) {
+        const maxStructuralEnd = structuralChildren.reduce((max, child) => {
+            return child.finalDate.isAfter(max) ? child.finalDate : max;
+        }, item.startDate);
+
+        if (maxStructuralEnd.isSame(item.finalDate, 'day') || maxStructuralEnd.isAfter(item.finalDate, 'day')) {
+            absorbImpactVisuals = true;
+        }
+    }
+
     if (isCritical) {
         bgClass = "bg-red-50 dark:bg-red-900/30";
         borderClass = "border-red-300 dark:border-red-800";
         progressClass = "bg-red-500";
         textClass = "text-red-800 dark:text-red-200";
+    } else if (isImpactTask) {
+        bgClass = "bg-orange-50 dark:bg-orange-900/30";
+        borderClass = "border-orange-300 dark:border-orange-800";
+        progressClass = "bg-orange-500";
+        textClass = "text-orange-800 dark:text-orange-200";
     } else if (isConflicted) {
         bgClass = "bg-orange-50 dark:bg-orange-900/30";
         borderClass = "border-orange-300 dark:border-orange-800";
@@ -40,12 +65,13 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
         progressClass = "bg-indigo-500";
         borderClass = "border-indigo-200 dark:border-indigo-700";
     }
-
-    const impactDays = item.impacts?.reduce((acc, curr) => acc + curr.days, 0) || 0;
-    const hasImpact = impactDays > 0;
+    // Removendo redeclaração duplicada de impactDays e hasImpact que causou erro de lint
 
     const impactWidth = impactDays * zoomLevel;
-    const safeWidth = Math.max(0, width - impactWidth);
+    // Quando absorbImpactVisuals é verdadeiro, incorporamos o "atraso" na largura da barra principal
+    // e não exibimos o segmento vermelho separado.
+    const safeWidth = absorbImpactVisuals ? width : Math.max(0, width - impactWidth);
+    const displayRedImpactBar = hasImpact && !absorbImpactVisuals;
 
     const lastImpactReason = hasImpact ? item.impacts[item.impacts.length - 1].reason : '';
     const looseTasks = item.children?.filter(c => c.status === 'loose-task') || [];
@@ -125,17 +151,17 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
                     className={`
                         relative h-full flex items-center px-2 cursor-grab active:cursor-grabbing transition-all overflow-visible
                         ${bgClass} ${borderClass} border-y border-l 
-                        ${hasImpact ? 'rounded-l-full border-r-0' : 'rounded-full border-r'}
+                        ${displayRedImpactBar ? 'rounded-l-full border-r-0' : 'rounded-full border-r'}
                     `}
                     style={{ width: safeWidth }}
                 >
-                    <div className={`absolute top-0 left-0 w-full h-full overflow-hidden ${hasImpact ? 'rounded-l-full' : 'rounded-full'}`}>
+                    <div className={`absolute top-0 left-0 w-full h-full overflow-hidden ${displayRedImpactBar ? 'rounded-l-full' : 'rounded-full'}`}>
                         <div className={`absolute top-0 left-0 h-full ${progressClass} opacity-10 transition-all`} style={{ width: `${item.percent}%` }} />
                         <div className={`absolute bottom-0 left-0 h-[3px] ${progressClass} transition-all`} style={{ width: `${item.percent}%` }} />
                     </div>
                 </div>
 
-                {hasImpact && (
+                {displayRedImpactBar && (
                     <Tooltip title={
                         <div className="text-center">
                             <div className="font-bold">Atraso: +{impactDays} dias</div>
@@ -182,8 +208,8 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
                     const taskLeft = relativeStartDays * zoomLevel;
                     const taskWidth = calculateWidth(task.startDate, task.finalDate, zoomLevel);
                     const isImpactTask = task.mode === 'impact';
-                    const taskColor = isImpactTask ? 'bg-red-500' : 'bg-amber-400';
-                    const taskBorder = isImpactTask ? 'border-red-700' : 'border-amber-600';
+                    const taskColor = isImpactTask ? 'bg-orange-500' : 'bg-amber-400';
+                    const taskBorder = isImpactTask ? 'border-orange-700' : 'border-amber-600';
 
                     return (
                         <Tooltip title={`${task.actionName} (${task.responsible})`} key={task.id}>

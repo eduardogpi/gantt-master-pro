@@ -52,13 +52,47 @@ dayjs.extend(duration);
 dayjs.extend(isBetween);
 dayjs.locale('pt-br');
 
+const extendActionsToCoverChildren = (items = []) => {
+    if (!items || items.length === 0) return [];
+    return items.map(item => {
+        const updatedChildren = item.children && item.children.length > 0
+            ? extendActionsToCoverChildren(item.children)
+            : [];
+
+        const updatedItem = { ...item, children: updatedChildren };
+        const structuralChildren = updatedChildren.filter(child => child.status !== 'loose-task');
+
+        if (structuralChildren.length > 0) {
+            const earliest = structuralChildren.reduce(
+                (minDate, child) => child.startDate.isBefore(minDate) ? child.startDate : minDate,
+                structuralChildren[0].startDate
+            );
+            const latest = structuralChildren.reduce(
+                (maxDate, child) => child.finalDate.isAfter(maxDate) ? child.finalDate : maxDate,
+                structuralChildren[0].finalDate
+            );
+
+            if (!updatedItem.startDate || earliest.isBefore(updatedItem.startDate)) {
+                updatedItem.startDate = earliest;
+            }
+            if (!updatedItem.finalDate || latest.isAfter(updatedItem.finalDate)) {
+                updatedItem.finalDate = latest;
+            }
+        }
+
+        return updatedItem;
+    });
+};
+
+const createInitialDataSnapshot = () => extendActionsToCoverChildren(initialMockData);
+
 const { Header, Content } = Layout;
 const { Title } = Typography;
 const { Option } = Select;
 const GanttGeral = () => {
     // --- Estado de Dados ---
-    const [data, setData] = useState(initialMockData); // Dados principais da ação
-    const [lastSavedData, setLastSavedData] = useState(initialMockData); // Snapshot para comparação de alterações (Salvar)
+    const [data, setData] = useState(() => createInitialDataSnapshot()); // Dados principais da ação
+    const [lastSavedData, setLastSavedData] = useState(() => createInitialDataSnapshot()); // Snapshot para comparação de alterações (Salvar)
     const [messageApi, contextHolder] = message.useMessage(); // API de mensagens do AntD
 
     // --- Estado de Visualização ---
@@ -74,7 +108,7 @@ const GanttGeral = () => {
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
     // --- Estado de Histórico (Undo/Redo) ---
-    const [history, setHistory] = useState({ past: [], present: initialMockData, future: [] });
+    const [history, setHistory] = useState(() => ({ past: [], present: createInitialDataSnapshot(), future: [] }));
 
     // --- Estado de Interação ---
     const [activeId, setActiveId] = useState(null); // ID do item sendo arrastado
@@ -184,12 +218,13 @@ const GanttGeral = () => {
     );
 
     const updateDataWithHistory = (newData) => {
+        const normalizedData = extendActionsToCoverChildren(newData);
         setHistory(curr => ({
             past: [...curr.past, curr.present],
-            present: newData,
+            present: normalizedData,
             future: []
         }));
-        setData(newData);
+        setData(normalizedData);
     };
 
     const handleUndo = useCallback(() => {
@@ -358,10 +393,11 @@ const GanttGeral = () => {
                                     // Aplicar o deslocamento (deltaDays) nas subtarefas afetadas
                                     newChildren = newChildren.map(child => {
                                         if (allAffectedChildIds.has(child.id)) {
+                                            const newImpacts = [...(child.impacts || []), { reason: `Impacto: ${taskName} (${responsible})`, days: deltaDays }];
                                             return {
                                                 ...child,
-                                                startDate: child.startDate.add(deltaDays, 'day'),
-                                                finalDate: child.finalDate.add(deltaDays, 'day')
+                                                finalDate: child.finalDate.add(deltaDays, 'day'),
+                                                impacts: newImpacts
                                             };
                                         }
                                         return child;
@@ -578,8 +614,10 @@ const GanttGeral = () => {
         };
 
         const newDataWithUpdatedBaselines = updateBaselines(data);
-        setData(newDataWithUpdatedBaselines);
-        setLastSavedData(newDataWithUpdatedBaselines);
+        const normalizedSavedData = extendActionsToCoverChildren(newDataWithUpdatedBaselines);
+        setData(normalizedSavedData);
+        setLastSavedData(normalizedSavedData);
+        setHistory(curr => ({ ...curr, present: normalizedSavedData }));
         setSaveModalOpen(false);
         message.success("Alterações salvas e baseline atualizada!");
     };

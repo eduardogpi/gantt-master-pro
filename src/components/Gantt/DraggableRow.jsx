@@ -69,7 +69,7 @@ const DraggableRow = React.memo(({ item, index, zoomLevel, showBaseline, isConfl
         }
     };
 
-    const handleClick = (e) => {
+    const handleClick = () => {
         // No mobile, o clique é tratado pelos eventos de touch
         if (isMobile) {
             return;
@@ -143,9 +143,11 @@ const DraggableRow = React.memo(({ item, index, zoomLevel, showBaseline, isConfl
                                 <div>Fim: <span className="text-black dark:text-slate-200">{item.finalDate.format('DD/MM')}</span></div>
                             </div>
                             <div className="flex flex-col gap-2 mt-2">
-                                <Button size="small" block icon={<ThunderboltOutlined />} className="text-orange-700 border-orange-300 bg-orange-50 hover:bg-orange-100 dark:bg-orange-900/30 dark:border-orange-800 dark:text-orange-400" onClick={() => { setPopoverOpen(false); onAddLooseTask(item); }}>
-                                    Adicionar Tarefa Avulsa
-                                </Button>
+                                {item.depth === 0 && (
+                                    <Button size="small" block icon={<ThunderboltOutlined />} className="text-orange-700 border-orange-300 bg-orange-50 hover:bg-orange-100 dark:bg-orange-900/30 dark:border-orange-800 dark:text-orange-400" onClick={() => { setPopoverOpen(false); onAddLooseTask(item); }}>
+                                        Adicionar Tarefa Avulsa
+                                    </Button>
+                                )}
                                 <div className="flex gap-2">
                                     <Button size="small" block icon={<EditOutlined />} onClick={() => { setPopoverOpen(false); onEdit(item); }}>Editar</Button>
                                     <Button size="small" block danger icon={<DeleteOutlined />} onClick={() => { setPopoverOpen(false); onDelete(item.id); }}>Excluir</Button>
