@@ -290,15 +290,35 @@ const GanttGeral = () => {
 
     const handleEditSave = (values) => {
         let newData = [...data];
+        const existingExternalDeps = modalEdit.item?.externalDependencies || [];
+        const baseExternalId = Date.now();
+        const externalDependencies = (values.externalDependencies || []).map((dep, index) => {
+            const existing = existingExternalDeps.find(ed => ed.id === dep.id);
+            const normalizedDate = dep.date ? dayjs(dep.date) : null;
+            const dateHistory = existing?.dateHistory ? [...existing.dateHistory] : [];
+
+            if (existing?.date && normalizedDate && !dayjs(existing.date).isSame(normalizedDate, 'day')) {
+                dateHistory.push({
+                    date: dayjs(existing.date).toISOString(),
+                    changedAt: new Date().toISOString()
+                });
+            }
+
+            return {
+                ...existing,
+                ...dep,
+                id: dep.id ?? existing?.id ?? baseExternalId + index,
+                date: normalizedDate,
+                dateHistory
+            };
+        });
+
         const newItem = {
             ...modalEdit.item,
             actionName: values.actionName,
             percent: values.percent,
             developers: values.developers ? values.developers.split(',').map(n => ({ name: n.trim(), role: 'Dev' })) : [],
-            externalDependencies: values.externalDependencies ? values.externalDependencies.map(d => ({
-                ...d,
-                date: d.date // dayjs object
-            })) : []
+            externalDependencies
         };
 
         if (modalEdit.isNew) {
@@ -1043,12 +1063,9 @@ const GanttGeral = () => {
                             {/* Desktop grande: Todas as ações expandidas */}
                             {!isMobile && !isTablet && (
                                 <>
-                                    <Button type="primary" size="small" className="hidden lg:flex bg-indigo-600 shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 border-none rounded-lg font-medium" icon={<PlusOutlined />} onClick={handleAddNew}>
+                                    <Button type="primary" size="small" className="bg-indigo-600 shadow-lg shadow-indigo-500/30 hover:bg-indigo-500 border-none rounded-lg font-medium" icon={<PlusOutlined />} onClick={handleAddNew}>
                                         Nova Ação
                                     </Button>
-                                    <Tooltip title="Nova Ação">
-                                        <Button type="primary" size="small" className="lg:hidden bg-indigo-600" icon={<PlusOutlined />} onClick={handleAddNew} />
-                                    </Tooltip>
 
                                     <div className="hidden md:flex items-center bg-slate-100 dark:bg-slate-800 rounded-lg p-0.5 gap-0.5">
                                         <Tooltip title="Nova Tarefa (Ctrl+N)">
@@ -1080,13 +1097,6 @@ const GanttGeral = () => {
                                         />
                                     </Tooltip>
 
-                                    {/* Menu para opções extras em telas médias */}
-                                    <Button
-                                        size="small"
-                                        icon={<MenuOutlined />}
-                                        onClick={() => setMobileMenuOpen(true)}
-                                        className="xl:hidden border-slate-200 dark:border-slate-700"
-                                    />
                                 </>
                             )}
 

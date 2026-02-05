@@ -77,6 +77,13 @@ const EditActionModal = ({
                                     <Space key={key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
                                         <Form.Item
                                             {...restField}
+                                            name={[name, 'id']}
+                                            hidden
+                                        >
+                                            <Input />
+                                        </Form.Item>
+                                        <Form.Item
+                                            {...restField}
                                             name={[name, 'name']}
                                             rules={[{ required: true, message: 'Nome obrigatório' }]}
                                         >
@@ -103,7 +110,7 @@ const EditActionModal = ({
                                     </Space>
                                 ))}
                                 <Form.Item>
-                                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                                    <Button type="dashed" onClick={() => add({ id: Date.now() })} block icon={<PlusOutlined />}>
                                         Adicionar Dependência Externa
                                     </Button>
                                 </Form.Item>

@@ -82,14 +82,16 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
         const depDate = dayjs(dep.date);
         const relativeDays = depDate.diff(item.startDate, 'day');
         const leftPos = relativeDays * zoomLevel;
-        
-        const isLate = dep.status === 'pending' && depDate.isBefore(dayjs(), 'day');
-        const delayDays = isLate ? dayjs().diff(depDate, 'day') : 0;
-        
+        const referenceEndDate = item.finalDate ? dayjs(item.finalDate) : dayjs();
+
+        const isLate = dep.status === 'pending' && referenceEndDate.isAfter(depDate, 'day');
+        const delayDays = isLate ? referenceEndDate.diff(depDate, 'day') : 0;
+        const forecastDate = isLate ? referenceEndDate : null;
+
         let markerColor = 'bg-slate-400 border-slate-600 dark:bg-slate-600 dark:border-slate-400'; // Default pending future
         if (dep.status === 'delivered') markerColor = 'bg-emerald-500 border-emerald-700';
         else if (isLate) markerColor = 'bg-red-500 border-red-700';
-        
+
         return (
             <Tooltip 
                 key={`ext-dep-${index}`} 
@@ -97,20 +99,30 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
                     <div className="text-center">
                         <div className="font-bold text-indigo-400">Dependência Externa</div>
                         <div className="font-bold text-white">{dep.name}</div>
-                        <div>{depDate.format('DD/MM/YYYY')}</div>
+                        <div>Previsto: {depDate.format('DD/MM/YYYY')}</div>
+                        {forecastDate && (
+                            <div className="text-amber-300">Previsão atual: {forecastDate.format('DD/MM/YYYY')}</div>
+                        )}
                         <div className="mt-1">
                             Status: {dep.status === 'delivered' 
                                 ? <span className="text-emerald-400">Entregue</span> 
                                 : <span className="text-slate-300">Pendente</span>}
                         </div>
                         {isLate && <div className="text-red-400 font-bold mt-1 animate-pulse">Atraso: +{delayDays} dias</div>}
+                        {dep.dateHistory?.length > 0 && (
+                            <div className="text-[10px] text-slate-300 mt-2">
+                                Histórico: {dep.dateHistory
+                                    .map((entry) => dayjs(entry.date).format('DD/MM/YYYY'))
+                                    .join(' → ')}
+                            </div>
+                        )}
                     </div>
                 }
             >
                 <div className="absolute z-40 group/marker" style={{ left: leftPos, top: '50%' }}>
                     {/* Linha indicadora */}
                     <div className={`absolute w-[2px] h-8 -top-4 left-0 bg-slate-300 dark:bg-slate-600 opacity-50 group-hover/marker:opacity-100 transition-opacity`} />
-                    
+
                     {/* Marcador Diamante */}
                     <div
                         className={`absolute w-3 h-3 -left-[5px] -top-[5px] transform rotate-45 border-2 ${markerColor} cursor-pointer shadow-sm hover:scale-125 transition-transform`}
@@ -122,6 +134,15 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
                             className="absolute -top-8 left-1/2 -translate-x-1/2 text-[9px] font-bold text-white bg-red-600 px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap z-50 pointer-events-none"
                         >
                             +{delayDays}d
+                        </div>
+                    )}
+
+                    {/* Nota de Previsão */}
+                    {forecastDate && (
+                        <div
+                            className="absolute left-3 -top-1 text-[9px] font-semibold text-red-100 bg-red-700/90 px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap z-50 pointer-events-none"
+                        >
+                            Prev: {forecastDate.format('DD/MM')}
                         </div>
                     )}
                 </div>

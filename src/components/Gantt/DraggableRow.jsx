@@ -76,6 +76,7 @@ const DraggableRow = React.memo(({ item, index, zoomLevel, showBaseline, isConfl
         }
         
         // Desktop: clique simples abre o modal
+        setPopoverOpen(false);
         if (onTaskClick) onTaskClick(item);
     };
 
@@ -154,7 +155,7 @@ const DraggableRow = React.memo(({ item, index, zoomLevel, showBaseline, isConfl
                                 </div>
                             </div>
                         </div>
-                    } title={null} trigger={isMobile ? [] : "click"}>
+                    } title={null} trigger={isMobile ? [] : "contextMenu"}>
                     <div>
                         <TaskBar
                             item={item}
