@@ -6,3 +6,4 @@ export { default as EditActionModal } from './EditActionModal';
 export { default as AuditModal } from './AuditModal';
 export { default as SaveChangesModal } from './SaveChangesModal';
 export { default as WelcomeModal } from './WelcomeModal';
+export { default as LogModal } from './LogModal';

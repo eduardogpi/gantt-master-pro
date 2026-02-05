@@ -44,7 +44,8 @@ import {
     EditActionModal,
     AuditModal,
     SaveChangesModal,
-    WelcomeModal
+    WelcomeModal,
+    LogModal
 } from './components/Modals';
 import { useKeyboardShortcuts } from './hooks';
 
@@ -130,6 +131,19 @@ const GanttGeral = () => {
         }
         return false;
     }); // Modal de boas vindas
+    const [logModalVisible, setLogModalVisible] = useState(false); // Modal de Logs
+    const [logs, setLogs] = useState([]); // Histórico de logs
+
+    const addLog = (action, description, payload) => {
+        const newLog = {
+            id: Date.now(),
+            action,
+            description,
+            timestamp: new Date().toISOString(),
+            data: payload
+        };
+        setLogs(prev => [newLog, ...prev]);
+    };
 
     const handleCloseWelcome = () => {
         localStorage.setItem('hasSeenWelcome_v1', 'true');
@@ -266,6 +280,7 @@ const GanttGeral = () => {
             developers: [{ name: 'Dev', role: 'Fullstack' }],
             percent: 0,
             dependencies: [],
+            externalDependencies: [],
             status: 'pending',
             impacts: [],
             children: []
@@ -280,6 +295,10 @@ const GanttGeral = () => {
             actionName: values.actionName,
             percent: values.percent,
             developers: values.developers ? values.developers.split(',').map(n => ({ name: n.trim(), role: 'Dev' })) : [],
+            externalDependencies: values.externalDependencies ? values.externalDependencies.map(d => ({
+                ...d,
+                date: d.date // dayjs object
+            })) : []
         };
 
         if (modalEdit.isNew) {
@@ -290,6 +309,7 @@ const GanttGeral = () => {
             newData[index] = newItem;
             message.success("Atualizado!");
         }
+        addLog('Salvar Ação', `Ação "${newItem.actionName}" ${modalEdit.isNew ? 'criada' : 'atualizada'}.`, newItem);
         updateDataWithHistory(newData);
         setModalEdit({ visible: false, item: null });
     };
@@ -306,8 +326,19 @@ const GanttGeral = () => {
     };
 
     const executeCreateTask = (taskData, mode, affectedProjects = []) => {
-        const { taskName, taskStart, taskEnd, responsible, parentProjectId } = taskData;
+        const { taskName, taskStart, taskEnd, responsible, parentProjectId, externalDependency } = taskData;
         const taskDurationDays = taskEnd.diff(taskStart, 'day');
+
+        // Configurar dependências externas se houver
+        let extDeps = [];
+        if (externalDependency) {
+            extDeps.push({
+                id: Date.now() + 1, // Fake ID
+                name: `${externalDependency.sector} - ${externalDependency.name}`,
+                date: externalDependency.date,
+                status: 'pending'
+            });
+        }
 
         const newTask = {
             id: Date.now(),
@@ -316,7 +347,8 @@ const GanttGeral = () => {
             finalDate: taskEnd,
             status: 'loose-task',
             mode: mode,
-            responsible: responsible
+            responsible: responsible,
+            externalDependencies: extDeps
         };
 
         let newData = [...data];
@@ -478,6 +510,7 @@ const GanttGeral = () => {
             if (affectedNames.length > 0) {
                 message.warning(`Ações adiadas e dependências ajustadas em cascata.`);
             }
+            addLog('Adicionar Tarefa Avulsa (Impacto)', `Tarefa "${taskName}" causou impacto em: ${affectedNames.join(', ')}`, { taskData, affectedNames });
         } else {
             message.success(`Tarefa "${taskName}" adicionada em paralelo.`);
         }
@@ -487,7 +520,7 @@ const GanttGeral = () => {
     };
 
     const handleSaveLooseTask = (values) => {
-        const { taskName, range, projectId, responsible } = values;
+        const { taskName, range, projectId, responsible, hasExternalDependency, externalDepSector, externalDepName, externalDepDate } = values;
 
         let parent = looseTaskModal.parentProject;
         if (!parent && projectId) {
@@ -503,8 +536,19 @@ const GanttGeral = () => {
         const taskEnd = range ? range[1].add(1, 'day').startOf('day') : dayjs().add(1, 'day').startOf('day');
 
         const identifyImpactedProjects = (targetDev, start, end) => {
+            // Função recursiva para verificar se o dev está em qualquer nível da árvore
+            const hasDevRecursively = (item) => {
+                const selfHas = (item.developers && item.developers.some(d => d.name === targetDev)) || 
+                                (item.responsible === targetDev);
+                if (selfHas) return true;
+                if (item.children && item.children.length > 0) {
+                    return item.children.some(c => hasDevRecursively(c));
+                }
+                return false;
+            };
+
             return data.filter(p => {
-                const hasDev = p.developers.some(d => d.name === targetDev);
+                const hasDev = hasDevRecursively(p);
                 // Colisão: (StartA < EndB) e (EndA > StartB) para intervalos exclusivos no final
                 const collides = start.isBefore(p.finalDate) && end.isAfter(p.startDate);
                 return hasDev && collides;
@@ -518,13 +562,19 @@ const GanttGeral = () => {
             taskStart,
             taskEnd,
             responsible,
-            parentProjectId: parent.id
+            parentProjectId: parent.id,
+            externalDependency: hasExternalDependency ? {
+                sector: externalDepSector,
+                name: externalDepName,
+                date: externalDepDate
+            } : null
         };
 
         if (affectedProjects.length > 0) {
             setConflictModal({ visible: true, taskData, affectedProjects });
             setLooseTaskModal({ visible: false, parentProject: null });
         } else {
+            addLog('Adicionar Tarefa Avulsa', `Tarefa "${taskName}" adicionada sem conflitos (Concorrente).`, taskData);
             executeCreateTask(taskData, 'concurrent');
             setLooseTaskModal({ visible: false, parentProject: null });
         }
@@ -545,6 +595,7 @@ const GanttGeral = () => {
             developers: [{ name: developer, role: 'Dev' }],
             percent: 0,
             dependencies: dependencyId ? [dependencyId] : [],
+            externalDependencies: [],
             status: 'pending',
             impacts: [],
             children: []
@@ -552,6 +603,7 @@ const GanttGeral = () => {
 
         const newData = [...data];
         newData[parentIndex].children.push(newTask);
+        addLog('Nova Tarefa Vinculada', `Tarefa "${taskName}" adicionada ao projeto ID ${projectId}`, newTask);
         updateDataWithHistory(newData);
         setNewTaskModal({ visible: false });
         setSelectedProjectForTask(null);
@@ -639,6 +691,12 @@ const GanttGeral = () => {
                         item.finalDate = dayjs(item.finalDate);
                         item.originalStartDate = dayjs(item.originalStartDate);
                         item.originalFinalDate = dayjs(item.originalFinalDate);
+                        if (item.externalDependencies) {
+                            item.externalDependencies = item.externalDependencies.map(d => ({
+                                ...d,
+                                date: dayjs(d.date)
+                            }));
+                        }
                         if (item.children) restoreDates(item.children);
                     });
                 };
@@ -1085,8 +1143,15 @@ const GanttGeral = () => {
                         title={
                             <div className="flex items-center justify-between">
                                 <span className="font-semibold">Menu</span>
+                                <Button 
+                            icon={<FileAddOutlined />} 
+                            onClick={() => setLogModalVisible(true)}
+                            className="dark:text-slate-300"
+                        >
+                            Logs
+                        </Button>
                                 <Button
-                                    type="text"
+                                    type="primary"
                                     size="small"
                                     icon={darkMode ? <SunOutlined className="text-yellow-500" /> : <MoonOutlined />}
                                     onClick={() => setDarkMode(!darkMode)}
@@ -1394,10 +1459,14 @@ const GanttGeral = () => {
                         visible={welcomeModalVisible}
                         onClose={handleCloseWelcome}
                     />
+                    
+                    <LogModal 
+                        visible={logModalVisible} 
+                        onCancel={() => setLogModalVisible(false)} 
+                        logs={logs} 
+                    />
                 </Layout>
             </div>
         </ConfigProvider>
     );
 };
-
-export default GanttGeral;

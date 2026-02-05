@@ -1,5 +1,7 @@
 import React from 'react';
-import { Modal, Form, Input, Slider, Button } from 'antd';
+import { Modal, Form, Input, Slider, Button, DatePicker, Select, Space } from 'antd';
+import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
+import dayjs from 'dayjs';
 
 // Hook simples para detectar mobile
 const useIsMobile = () => {
@@ -47,7 +49,11 @@ const EditActionModal = ({
                 initialValues={{
                     actionName: item.actionName,
                     percent: item.percent,
-                    developers: item.developers.map(d => d.name).join(', ')
+                    developers: item.developers.map(d => d.name).join(', '),
+                    externalDependencies: item.externalDependencies ? item.externalDependencies.map(d => ({
+                        ...d,
+                        date: dayjs(d.date)
+                    })) : []
                 }} 
                 onFinish={onFinish}
             >
@@ -60,6 +66,52 @@ const EditActionModal = ({
                 <Form.Item name="developers" label="Desenvolvedores">
                     <Input placeholder="Ex: João, Maria" />
                 </Form.Item>
+
+                {/* Seção de Dependências Externas */}
+                <div className="mb-4">
+                    <div className="text-sm font-bold mb-2 text-slate-600 dark:text-slate-400">Dependências Externas</div>
+                    <Form.List name="externalDependencies">
+                        {(fields, { add, remove }) => (
+                            <>
+                                {fields.map(({ key, name, ...restField }) => (
+                                    <Space key={key} style={{ display: 'flex', marginBottom: 8 }} align="baseline">
+                                        <Form.Item
+                                            {...restField}
+                                            name={[name, 'name']}
+                                            rules={[{ required: true, message: 'Nome obrigatório' }]}
+                                        >
+                                            <Input placeholder="Nome da Dependência" />
+                                        </Form.Item>
+                                        <Form.Item
+                                            {...restField}
+                                            name={[name, 'date']}
+                                            rules={[{ required: true, message: 'Data obrigatória' }]}
+                                        >
+                                            <DatePicker format="DD/MM/YYYY" placeholder="Data Prevista" />
+                                        </Form.Item>
+                                        <Form.Item
+                                            {...restField}
+                                            name={[name, 'status']}
+                                            initialValue="pending"
+                                        >
+                                            <Select style={{ width: 110 }}>
+                                                <Select.Option value="pending">Pendente</Select.Option>
+                                                <Select.Option value="delivered">Entregue</Select.Option>
+                                            </Select>
+                                        </Form.Item>
+                                        <MinusCircleOutlined onClick={() => remove(name)} className="text-red-500" />
+                                    </Space>
+                                ))}
+                                <Form.Item>
+                                    <Button type="dashed" onClick={() => add()} block icon={<PlusOutlined />}>
+                                        Adicionar Dependência Externa
+                                    </Button>
+                                </Form.Item>
+                            </>
+                        )}
+                    </Form.List>
+                </div>
+
                 <div className="flex justify-end gap-2 mt-4">
                     <Button onClick={onCancel}>Cancelar</Button>
                     <Button type="primary" htmlType="submit" className="bg-indigo-600">Salvar</Button>

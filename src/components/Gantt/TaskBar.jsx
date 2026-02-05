@@ -76,6 +76,59 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
     const lastImpactReason = hasImpact ? item.impacts[item.impacts.length - 1].reason : '';
     const looseTasks = item.children?.filter(c => c.status === 'loose-task') || [];
 
+    // Lógica para Dependências Externas
+    const externalDepMarkers = item.externalDependencies?.map((dep, index) => {
+        // Garantir que é objeto Dayjs
+        const depDate = dayjs(dep.date);
+        const relativeDays = depDate.diff(item.startDate, 'day');
+        const leftPos = relativeDays * zoomLevel;
+        
+        const isLate = dep.status === 'pending' && depDate.isBefore(dayjs(), 'day');
+        const delayDays = isLate ? dayjs().diff(depDate, 'day') : 0;
+        
+        let markerColor = 'bg-slate-400 border-slate-600 dark:bg-slate-600 dark:border-slate-400'; // Default pending future
+        if (dep.status === 'delivered') markerColor = 'bg-emerald-500 border-emerald-700';
+        else if (isLate) markerColor = 'bg-red-500 border-red-700';
+        
+        return (
+            <Tooltip 
+                key={`ext-dep-${index}`} 
+                title={
+                    <div className="text-center">
+                        <div className="font-bold text-indigo-400">Dependência Externa</div>
+                        <div className="font-bold text-white">{dep.name}</div>
+                        <div>{depDate.format('DD/MM/YYYY')}</div>
+                        <div className="mt-1">
+                            Status: {dep.status === 'delivered' 
+                                ? <span className="text-emerald-400">Entregue</span> 
+                                : <span className="text-slate-300">Pendente</span>}
+                        </div>
+                        {isLate && <div className="text-red-400 font-bold mt-1 animate-pulse">Atraso: +{delayDays} dias</div>}
+                    </div>
+                }
+            >
+                <div className="absolute z-40 group/marker" style={{ left: leftPos, top: '50%' }}>
+                    {/* Linha indicadora */}
+                    <div className={`absolute w-[2px] h-8 -top-4 left-0 bg-slate-300 dark:bg-slate-600 opacity-50 group-hover/marker:opacity-100 transition-opacity`} />
+                    
+                    {/* Marcador Diamante */}
+                    <div
+                        className={`absolute w-3 h-3 -left-[5px] -top-[5px] transform rotate-45 border-2 ${markerColor} cursor-pointer shadow-sm hover:scale-125 transition-transform`}
+                    />
+
+                    {/* Badge de Atraso */}
+                    {isLate && (
+                        <div 
+                            className="absolute -top-8 left-1/2 -translate-x-1/2 text-[9px] font-bold text-white bg-red-600 px-1.5 py-0.5 rounded shadow-sm whitespace-nowrap z-50 pointer-events-none"
+                        >
+                            +{delayDays}d
+                        </div>
+                    )}
+                </div>
+            </Tooltip>
+        );
+    });
+
     // Lógica de Dependência (Waiting Bar)
     const waitingBars = item.dependencies?.map(depId => {
         // Busca recursiva em allData para encontrar o pai, pois pode ser uma sub-tarefa
@@ -129,6 +182,9 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
 
     return (
         <div className="relative w-full h-full flex items-center">
+            {/* Renderizar Dependências Externas */}
+            {externalDepMarkers}
+
             {/* Renderizar Waiting Bars (Dependências) */}
             {waitingBars}
 
