@@ -541,7 +541,7 @@ const GanttGeral = () => {
                 const selfHas = (item.developers && item.developers.some(d => d.name === targetDev)) || 
                                 (item.responsible === targetDev);
                 if (selfHas) return true;
-                if (item.children && item.children.length > 0) {
+                if (item.children) {
                     return item.children.some(c => hasDevRecursively(c));
                 }
                 return false;
@@ -1470,3 +1470,5 @@ const GanttGeral = () => {
         </ConfigProvider>
     );
 };
+
+export default GanttGeral;
