@@ -1,21 +1,7 @@
 import React from 'react';
 import { Modal, Button } from 'antd';
 import { WarningOutlined, ThunderboltOutlined, BlockOutlined } from '@ant-design/icons';
-
-// Hook simples para detectar mobile
-const useIsMobile = () => {
-    const [isMobile, setIsMobile] = React.useState(
-        typeof window !== 'undefined' ? window.innerWidth < 768 : false
-    );
-    
-    React.useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-    
-    return isMobile;
-};
+import { useIsMobile } from '../../hooks';
 
 /**
  * Modal para resolver conflitos de agenda ao criar tarefa avulsa

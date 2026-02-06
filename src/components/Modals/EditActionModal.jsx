@@ -2,21 +2,7 @@ import React from 'react';
 import { Modal, Form, Input, Slider, Button, DatePicker, Select, Space } from 'antd';
 import { MinusCircleOutlined, PlusOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
-
-// Hook simples para detectar mobile
-const useIsMobile = () => {
-    const [isMobile, setIsMobile] = React.useState(
-        typeof window !== 'undefined' ? window.innerWidth < 768 : false
-    );
-    
-    React.useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-    
-    return isMobile;
-};
+import { useIsMobile } from '../../hooks';
 
 /**
  * Modal para editar ou criar uma ação
@@ -49,6 +35,8 @@ const EditActionModal = ({
                 initialValues={{
                     actionName: item.actionName,
                     percent: item.percent,
+                    startDate: item.startDate ? dayjs(item.startDate) : undefined,
+                    finalDate: item.finalDate ? dayjs(item.finalDate) : undefined,
                     developers: item.developers.map(d => d.name).join(', '),
                     externalDependencies: item.externalDependencies ? item.externalDependencies.map(d => ({
                         ...d,
@@ -60,6 +48,14 @@ const EditActionModal = ({
                 <Form.Item name="actionName" label="Nome" rules={[{ required: true }]}>
                     <Input />
                 </Form.Item>
+                <div className="grid grid-cols-2 gap-3">
+                    <Form.Item name="startDate" label="Início">
+                        <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+                    </Form.Item>
+                    <Form.Item name="finalDate" label="Fim">
+                        <DatePicker format="DD/MM/YYYY" style={{ width: '100%' }} />
+                    </Form.Item>
+                </div>
                 <Form.Item name="percent" label="Progresso">
                     <Slider min={0} max={100} />
                 </Form.Item>

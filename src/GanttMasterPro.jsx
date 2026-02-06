@@ -1,7 +1,6 @@
 //@ts-nocheck
-"use client"
-import React, { useState, useMemo, useEffect, useCallback } from "react";
-import { Layout, Typography, Button, Modal, Slider, Input, Form, Select, List, DatePicker, ConfigProvider, theme, message, Tooltip, Segmented, Switch, Drawer } from "antd";
+import React, { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { Layout, Typography, Button, Modal, Slider, Select, ConfigProvider, theme, message, Tooltip, Segmented, Switch, Drawer } from "antd";
 import ptBR from 'antd/locale/pt_BR';
 import dayjs from "dayjs";
 import duration from "dayjs/plugin/duration";
@@ -45,9 +44,10 @@ import {
     AuditModal,
     SaveChangesModal,
     WelcomeModal,
-    LogModal
+    LogModal,
+    DevScheduleModal
 } from './components/Modals';
-import { useKeyboardShortcuts } from './hooks';
+import { useKeyboardShortcuts, useBreakpoint } from './hooks';
 
 dayjs.extend(duration);
 dayjs.extend(isBetween);
@@ -87,13 +87,50 @@ const extendActionsToCoverChildren = (items = []) => {
 
 const createInitialDataSnapshot = () => extendActionsToCoverChildren(initialMockData);
 
+const STORAGE_KEY = 'gantt_master_pro_data';
+
+// Serializa dados para localStorage (converte dayjs para ISO string)
+const serializeData = (items) => {
+    return JSON.stringify(items, (key, value) => {
+        if (value && typeof value === 'object' && value.$isDayjsObject) {
+            return { __dayjs: true, value: value.toISOString() };
+        }
+        return value;
+    });
+};
+
+// Deserializa dados do localStorage (restaura dayjs)
+const deserializeData = (json) => {
+    return JSON.parse(json, (key, value) => {
+        if (value && typeof value === 'object' && value.__dayjs) {
+            return dayjs(value.value);
+        }
+        return value;
+    });
+};
+
+const loadSavedData = () => {
+    try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (saved) {
+            const parsed = deserializeData(saved);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return extendActionsToCoverChildren(parsed);
+            }
+        }
+    } catch (e) {
+        console.warn('Falha ao carregar dados salvos:', e);
+    }
+    return null;
+};
+
 const { Header, Content } = Layout;
 const { Title } = Typography;
 const { Option } = Select;
 const GanttGeral = () => {
-    // --- Estado de Dados ---
-    const [data, setData] = useState(() => createInitialDataSnapshot()); // Dados principais da ação
-    const [lastSavedData, setLastSavedData] = useState(() => createInitialDataSnapshot()); // Snapshot para comparação de alterações (Salvar)
+    // --- Estado de Dados --- (carrega do localStorage se disponível)
+    const [data, setData] = useState(() => loadSavedData() || createInitialDataSnapshot());
+    const [lastSavedData, setLastSavedData] = useState(() => loadSavedData() || createInitialDataSnapshot());
     const [messageApi, contextHolder] = message.useMessage(); // API de mensagens do AntD
 
     // --- Estado de Visualização ---
@@ -104,11 +141,11 @@ const GanttGeral = () => {
     const [interactionMode, setInteractionMode] = useState('horizontal'); // 'horizontal' (Cronograma) ou 'vertical' (Prioridade)
     const [darkMode, setDarkMode] = useState(true); // Tema escuro/claro
     const [showSubtasks, setShowSubtasks] = useState(true); // Mostrar subtarefas
-    const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth < 768 : false);
-    const [isTablet, setIsTablet] = useState(typeof window !== 'undefined' ? window.innerWidth >= 768 && window.innerWidth < 1024 : false);
+    const { isMobile, isTablet } = useBreakpoint();
     const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-    // --- Estado de Histórico (Undo/Redo) ---
+    // --- Estado de Histórico (Undo/Redo) --- (limitado a MAX_HISTORY entradas)
+    const MAX_HISTORY = 50;
     const [history, setHistory] = useState(() => ({ past: [], present: createInitialDataSnapshot(), future: [] }));
 
     // --- Estado de Interação ---
@@ -132,6 +169,7 @@ const GanttGeral = () => {
         return false;
     }); // Modal de boas vindas
     const [logModalVisible, setLogModalVisible] = useState(false); // Modal de Logs
+    const [devScheduleModalVisible, setDevScheduleModalVisible] = useState(false); // Modal Agenda Dev
     const [logs, setLogs] = useState([]); // Histórico de logs
 
     const addLog = (action, description, payload) => {
@@ -231,10 +269,52 @@ const GanttGeral = () => {
         useSensor(KeyboardSensor)
     );
 
+    // Helper: busca e atualiza item recursivamente na árvore
+    const updateItemInTree = (items, targetId, updater) => {
+        return items.map(item => {
+            if (item.id === targetId) return updater(item);
+            if (item.children && item.children.length > 0) {
+                return { ...item, children: updateItemInTree(item.children, targetId, updater) };
+            }
+            return item;
+        });
+    };
+
+    // Helper: remove item recursivamente da árvore
+    const removeItemFromTree = (items, targetId) => {
+        return items
+            .filter(item => item.id !== targetId)
+            .map(item => {
+                if (item.children && item.children.length > 0) {
+                    return { ...item, children: removeItemFromTree(item.children, targetId) };
+                }
+                return item;
+            });
+    };
+
+    // Helper: deep clone que preserva dayjs
+    const deepCloneData = (items) => {
+        return items.map(item => {
+            const cloned = { ...item };
+            if (cloned.children) cloned.children = deepCloneData(cloned.children);
+            if (cloned.externalDependencies) {
+                cloned.externalDependencies = cloned.externalDependencies.map(d => ({
+                    ...d,
+                    date: d.date ? dayjs(d.date) : null,
+                    dateHistory: d.dateHistory ? [...d.dateHistory] : []
+                }));
+            }
+            if (cloned.impacts) cloned.impacts = [...cloned.impacts];
+            if (cloned.dependencies) cloned.dependencies = [...cloned.dependencies];
+            if (cloned.developers) cloned.developers = cloned.developers.map(d => ({ ...d }));
+            return cloned;
+        });
+    };
+
     const updateDataWithHistory = (newData) => {
         const normalizedData = extendActionsToCoverChildren(newData);
         setHistory(curr => ({
-            past: [...curr.past, curr.present],
+            past: [...curr.past, curr.present].slice(-MAX_HISTORY),
             present: normalizedData,
             future: []
         }));
@@ -321,12 +401,14 @@ const GanttGeral = () => {
             externalDependencies
         };
 
+        if (values.startDate) newItem.startDate = dayjs(values.startDate);
+        if (values.finalDate) newItem.finalDate = dayjs(values.finalDate);
+
         if (modalEdit.isNew) {
             newData.push(newItem);
             message.success("Criado!");
         } else {
-            const index = newData.findIndex(i => i.id === newItem.id);
-            newData[index] = newItem;
+            newData = updateItemInTree(newData, newItem.id, () => newItem);
             message.success("Atualizado!");
         }
         addLog('Salvar Ação', `Ação "${newItem.actionName}" ${modalEdit.isNew ? 'criada' : 'atualizada'}.`, newItem);
@@ -338,7 +420,7 @@ const GanttGeral = () => {
         Modal.confirm({
             title: 'Excluir?',
             onOk: () => {
-                const newData = data.filter(i => i.id !== id);
+                const newData = removeItemFromTree(data, id);
                 updateDataWithHistory(newData);
                 message.success("Removido.");
             }
@@ -621,8 +703,10 @@ const GanttGeral = () => {
             children: []
         };
 
-        const newData = [...data];
-        newData[parentIndex].children.push(newTask);
+        const newData = updateItemInTree(data, projectId, (parent) => ({
+            ...parent,
+            children: [...(parent.children || []), newTask]
+        }));
         addLog('Nova Tarefa Vinculada', `Tarefa "${taskName}" adicionada ao projeto ID ${projectId}`, newTask);
         updateDataWithHistory(newData);
         setNewTaskModal({ visible: false });
@@ -691,6 +775,13 @@ const GanttGeral = () => {
         setLastSavedData(normalizedSavedData);
         setHistory(curr => ({ ...curr, present: normalizedSavedData }));
         setSaveModalOpen(false);
+
+        // Persistir no localStorage
+        try {
+            localStorage.setItem(STORAGE_KEY, serializeData(normalizedSavedData));
+        } catch (e) {
+            console.warn('Falha ao salvar no localStorage:', e);
+        }
         message.success("Alterações salvas e baseline atualizada!");
     };
 
@@ -701,26 +792,8 @@ const GanttGeral = () => {
 
         if (interactionMode === 'vertical') {
             if (over && active.id !== over.id) {
-                // Deep clone para manipular estrutura aninhada com segurança
-                const newData = JSON.parse(JSON.stringify(data));
-
-                // Restaurar objetos Dayjs que viraram string no JSON.stringify
-                const restoreDates = (list) => {
-                    list.forEach(item => {
-                        item.startDate = dayjs(item.startDate);
-                        item.finalDate = dayjs(item.finalDate);
-                        item.originalStartDate = dayjs(item.originalStartDate);
-                        item.originalFinalDate = dayjs(item.originalFinalDate);
-                        if (item.externalDependencies) {
-                            item.externalDependencies = item.externalDependencies.map(d => ({
-                                ...d,
-                                date: dayjs(d.date)
-                            }));
-                        }
-                        if (item.children) restoreDates(item.children);
-                    });
-                };
-                restoreDates(newData);
+                // Deep clone que preserva objetos Dayjs
+                const newData = deepCloneData(data);
 
                 const findParentAndIndex = (items, id, parent = null) => {
                     for (let i = 0; i < items.length; i++) {
@@ -946,15 +1019,20 @@ const GanttGeral = () => {
         return p.developers.map(d => d.name);
     }, [looseTaskModal.parentProject]);
 
-    // Effect para detectar mudança de tamanho da tela (mobile/tablet)
+    // Aviso ao sair com alterações não salvas
+    const hasUnsavedChanges = useRef(false);
     useEffect(() => {
-        const handleResize = () => {
-            const width = window.innerWidth;
-            setIsMobile(width < 768);
-            setIsTablet(width >= 768 && width < 1024);
+        hasUnsavedChanges.current = data !== lastSavedData;
+    }, [data, lastSavedData]);
+    useEffect(() => {
+        const handler = (e) => {
+            if (hasUnsavedChanges.current) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
         };
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
+        window.addEventListener('beforeunload', handler);
+        return () => window.removeEventListener('beforeunload', handler);
     }, []);
 
     // --- Verificar se algum modal está aberto (para desabilitar atalhos) ---
@@ -1031,9 +1109,9 @@ const GanttGeral = () => {
                                 {allResponsibles.map(dev => <Option key={dev} value={dev}>{dev}</Option>)}
                             </Select>
 
-                            {/* View Controls - apenas em desktop grande */}
+                            {/* View Controls - desktop */}
                             {!isMobile && !isTablet && (
-                                <div className="hidden xl:flex items-center gap-3 bg-slate-100/50 dark:bg-slate-900/50 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
+                                <div className="flex items-center gap-3 bg-slate-100/50 dark:bg-slate-900/50 p-1 rounded-xl border border-slate-200 dark:border-slate-800">
                                     <Segmented
                                         size="small"
                                         options={[
@@ -1086,6 +1164,12 @@ const GanttGeral = () => {
                                         <Tooltip title="Refazer (Ctrl+Y)">
                                             <Button size="small" type="text" icon={<RedoOutlined />} onClick={handleRedo} disabled={history.future.length === 0} />
                                         </Tooltip>
+                                        <Tooltip title="Agenda Dev">
+                                            <Button size="small" type="text" icon={<GlobalOutlined />} onClick={() => setDevScheduleModalVisible(true)} />
+                                        </Tooltip>
+                                        <Tooltip title="Logs">
+                                            <Button size="small" type="text" icon={<DiffOutlined />} onClick={() => setLogModalVisible(true)} />
+                                        </Tooltip>
                                     </div>
 
                                     <Tooltip title={darkMode ? 'Modo Claro' : 'Modo Escuro'}>
@@ -1112,6 +1196,9 @@ const GanttGeral = () => {
                                         </Tooltip>
                                         <Tooltip title="Desfazer">
                                             <Button size="small" type="text" icon={<UndoOutlined />} onClick={handleUndo} disabled={history.past.length === 0} />
+                                        </Tooltip>
+                                        <Tooltip title="Agenda Dev">
+                                            <Button size="small" type="text" icon={<GlobalOutlined />} onClick={() => setDevScheduleModalVisible(true)} />
                                         </Tooltip>
                                     </div>
                                     <Tooltip title={darkMode ? 'Modo Claro' : 'Modo Escuro'}>
@@ -1207,6 +1294,14 @@ const GanttGeral = () => {
                                     onClick={() => { setLooseTaskModal({ visible: true, parentProject: null }); setMobileMenuOpen(false); }}
                                 >
                                     Adicionar Tarefa Avulsa
+                                </Button>
+                                <Button
+                                    block
+                                    className="mt-2 h-10"
+                                    icon={<GlobalOutlined className="text-indigo-500" />}
+                                    onClick={() => { setDevScheduleModalVisible(true); setMobileMenuOpen(false); }}
+                                >
+                                    Agenda Dev
                                 </Button>
                             </div>
 
@@ -1474,6 +1569,13 @@ const GanttGeral = () => {
                         visible={logModalVisible} 
                         onCancel={() => setLogModalVisible(false)} 
                         logs={logs} 
+                    />
+
+                    <DevScheduleModal
+                        visible={devScheduleModalVisible}
+                        onCancel={() => setDevScheduleModalVisible(false)}
+                        data={data}
+                        allResponsibles={allResponsibles}
                     />
                 </Layout>
             </div>

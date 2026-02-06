@@ -3,7 +3,7 @@ import dayjs from 'dayjs';
 import { Tooltip } from 'antd';
 import { calculateWidth } from '../../utils/ganttUtils.js';
 
-const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft, baseWidth, rank, zoomLevel, allData = [], isMobile = false }) => {
+const TaskBar = React.memo(({ item, width, isCritical, isConflicted, showBaseline, baseLeft, baseWidth, rank, zoomLevel, allData = [], isMobile = false }) => {
     let bgClass = "bg-white dark:bg-slate-800 border-blue-200 dark:border-blue-700";
     let progressClass = "bg-blue-500";
     let textClass = "text-slate-700 dark:text-slate-200";
@@ -287,12 +287,15 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
                     const isImpactTask = task.mode === 'impact';
                     const taskColor = isImpactTask ? 'bg-orange-500' : 'bg-amber-400';
                     const taskBorder = isImpactTask ? 'border-orange-700' : 'border-amber-600';
+                    const taskGlow = isImpactTask
+                        ? 'hover:ring-2 hover:ring-orange-400/70 hover:ring-offset-1 hover:ring-offset-orange-100/60 dark:hover:ring-offset-orange-900/40'
+                        : 'hover:ring-2 hover:ring-amber-400/60 hover:ring-offset-1 hover:ring-offset-amber-100/60 dark:hover:ring-offset-amber-900/40';
 
                     return (
                         <Tooltip title={`${task.actionName} (${task.responsible})`} key={task.id}>
                             <div
-                                className={`absolute h-[10px] top-[${isSubTask ? '20px' : '26px'}] rounded-full border ${taskColor} ${taskBorder} shadow-sm z-30 cursor-help hover:scale-110 transition-transform`}
-                                style={{ left: taskLeft, width: taskWidth, minWidth: 8 }}
+                                className={`absolute h-[10px] rounded-full border ${taskColor} ${taskBorder} ${taskGlow} shadow-sm z-30 cursor-help transition-shadow`}
+                                style={{ left: taskLeft, width: taskWidth, minWidth: 8, top: isSubTask ? 20 : 26 }}
                             />
                         </Tooltip>
                     );
@@ -300,6 +303,6 @@ const TaskBar = ({ item, width, isCritical, isConflicted, showBaseline, baseLeft
             </div>
         </div>
     );
-};
+});
 
 export default TaskBar;

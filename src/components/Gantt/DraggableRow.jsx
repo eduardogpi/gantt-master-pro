@@ -22,7 +22,7 @@ const DraggableRow = React.memo(({ item, index, zoomLevel, showBaseline, isConfl
     const baseLeft = calculateLeft(item.originalStartDate, zoomLevel, startDate);
     const baseWidth = calculateWidth(item.originalStartDate, item.originalFinalDate, zoomLevel);
 
-    const isCritical = item.dependencies.length > 0 || item.finalDate.isAfter(item.originalFinalDate);
+    const isCritical = (item.dependencies?.length > 0) || (item.originalFinalDate && item.finalDate.isAfter(item.originalFinalDate));
     const cursorClass = isMobile ? 'cursor-pointer' : (interactionMode === 'horizontal' ? 'cursor-ew-resize' : 'cursor-ns-resize');
     const rowStyle = isOver && interactionMode === 'vertical' ? 'bg-blue-50 border-blue-300 z-10' : '';
 
@@ -134,7 +134,12 @@ const DraggableRow = React.memo(({ item, index, zoomLevel, showBaseline, isConfl
                         setPopoverOpen(open);
                     }}
                     content={
-                        <div className="text-xs w-56">
+                        <div
+                            className="text-xs w-56"
+                            onClick={(e) => e.stopPropagation()}
+                            onContextMenu={(e) => e.stopPropagation()}
+                            onMouseDown={(e) => e.stopPropagation()}
+                        >
                             <div className="flex justify-between items-center border-b pb-1 mb-1 dark:border-slate-700">
                                 <span className="font-bold text-sm truncate max-w-[120px] dark:text-slate-200">{item.actionName}</span>
                                 <Tag color="blue">#{globalRank}</Tag>

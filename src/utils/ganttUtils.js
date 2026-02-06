@@ -57,12 +57,23 @@ export function calculateTop(index, isMobile = false) {
 export function getConflictedIds(items, limit) {
     const conflicts = new Set();
     const devMap = {};
-    items.forEach(item => {
-        item.developers.forEach(dev => {
-            if (!devMap[dev.name]) devMap[dev.name] = [];
-            devMap[dev.name].push({ id: item.id, start: item.startDate, end: item.finalDate });
+
+    // Coleta recursiva de todas as atribuições dev→período
+    const collectAssignments = (list) => {
+        list.forEach(item => {
+            if (item.developers) {
+                item.developers.forEach(dev => {
+                    if (!devMap[dev.name]) devMap[dev.name] = [];
+                    devMap[dev.name].push({ id: item.id, start: item.startDate, end: item.finalDate });
+                });
+            }
+            if (item.children && item.children.length > 0) {
+                collectAssignments(item.children);
+            }
         });
-    });
+    };
+    collectAssignments(items);
+
     Object.keys(devMap).forEach(devName => {
         const assignments = devMap[devName];
         for (let i = 0; i < assignments.length; i++) {

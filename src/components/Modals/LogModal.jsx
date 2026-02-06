@@ -13,7 +13,7 @@ const LogModal = ({ visible, onCancel, logs }) => {
             onCancel={onCancel}
             footer={null}
             width={800}
-            bodyStyle={{ maxHeight: '60vh', overflowY: 'auto' }}
+            styles={{ body: { maxHeight: '60vh', overflowY: 'auto' } }}
         >
             <List
                 itemLayout="horizontal"

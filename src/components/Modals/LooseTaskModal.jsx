@@ -1,23 +1,9 @@
 import React from 'react';
 import { Modal, Form, Input, Select, DatePicker, Button } from 'antd';
 import { GlobalOutlined } from '@ant-design/icons';
+import { useIsMobile } from '../../hooks';
 
 const { Option } = Select;
-
-// Hook simples para detectar mobile
-const useIsMobile = () => {
-    const [isMobile, setIsMobile] = React.useState(
-        typeof window !== 'undefined' ? window.innerWidth < 768 : false
-    );
-    
-    React.useEffect(() => {
-        const handleResize = () => setIsMobile(window.innerWidth < 768);
-        window.addEventListener('resize', handleResize);
-        return () => window.removeEventListener('resize', handleResize);
-    }, []);
-    
-    return isMobile;
-};
 
 /**
  * Modal para criar uma tarefa avulsa (urgente/não planejada)

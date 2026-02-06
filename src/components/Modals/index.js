@@ -7,3 +7,4 @@ export { default as AuditModal } from './AuditModal';
 export { default as SaveChangesModal } from './SaveChangesModal';
 export { default as WelcomeModal } from './WelcomeModal';
 export { default as LogModal } from './LogModal';
+export { default as DevScheduleModal } from './DevScheduleModal';

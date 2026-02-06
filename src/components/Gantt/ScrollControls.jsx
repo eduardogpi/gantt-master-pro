@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Button } from 'antd';
 import { LeftOutlined, RightOutlined, UpOutlined, DownOutlined } from '@ant-design/icons';
 
@@ -9,7 +9,7 @@ const ScrollControls = ({ containerId, dependencies = [] }) => {
     const [showDown, setShowDown] = useState(false);
     const [scrollProgress, setScrollProgress] = useState({ x: 0, y: 0 });
 
-    const checkScroll = () => {
+    const checkScroll = useCallback(() => {
         const container = document.getElementById(containerId);
         if (!container) return;
 
@@ -32,7 +32,7 @@ const ScrollControls = ({ containerId, dependencies = [] }) => {
             : 0;
         
         setScrollProgress({ x: xProgress, y: yProgress });
-    };
+    }, [containerId]);
 
     useEffect(() => {
         const container = document.getElementById(containerId);
@@ -41,19 +41,21 @@ const ScrollControls = ({ containerId, dependencies = [] }) => {
         container.addEventListener('scroll', checkScroll);
         window.addEventListener('resize', checkScroll);
 
-        // Initial check
-        checkScroll();
+        // Initial check after a frame to avoid synchronous setState in effect
+        const raf = requestAnimationFrame(checkScroll);
 
         return () => {
             container.removeEventListener('scroll', checkScroll);
             window.removeEventListener('resize', checkScroll);
+            cancelAnimationFrame(raf);
         };
-    }, [containerId, ...dependencies]);
+    }, [containerId, checkScroll]);
 
     // Re-check when dependencies change (e.g. zoom level, data length)
     useEffect(() => {
-        checkScroll();
-    }, dependencies);
+        const raf = requestAnimationFrame(checkScroll);
+        return () => cancelAnimationFrame(raf);
+    }, [checkScroll, ...dependencies]);
 
     const scroll = (direction) => {
         const container = document.getElementById(containerId);
